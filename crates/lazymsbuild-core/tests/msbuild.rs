@@ -110,6 +110,32 @@ fn win32_entries_pass_clangd_check() {
 }
 
 #[test]
+fn clang_tidy_reads_the_database_without_p() {
+    require_msbuild!();
+    let msbuild = locate::locate(None, None).unwrap();
+    let tidy = lazymsbuild_core::fsutil::which("clang-tidy").or_else(|| {
+        let instance = msbuild.instance.as_ref()?;
+        Some(instance.path.join(r"VC\Tools\Llvm\x64\bin\clang-tidy.exe")).filter(|p| p.is_file())
+    });
+    let Some(tidy) = tidy else {
+        eprintln!("skipped: clang-tidy not found");
+        return;
+    };
+    let sb = sandbox("basic", false);
+    let mut workspace = sb.workspace("Basic.sln");
+    let (outcome, _) = build(&mut workspace, Verb::Rebuild, None);
+    assert_eq!(outcome.state, State::Succeeded, "{:?}", outcome.notes);
+    // main.cpp uses App's precompiled header and pch.cpp makes it: clang-tidy reads neither .pch.
+    for file in [r"src\App\main.cpp", r"src\App\pch.cpp", r"src\Core\core.cpp", r"src\Util\util.c"] {
+        let output =
+            Command::new(&tidy).current_dir(&sb.repo).args(["--checks=-*,clang-analyzer-*", file]).output().unwrap();
+        let text = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(!text.contains("compilation database"), "{file}: clang-tidy did not find the database: {text}");
+        assert!(output.status.success(), "{file}: {text}");
+    }
+}
+
+#[test]
 fn a_failed_build_keeps_the_entries() {
     require_msbuild!();
     let sb = sandbox("basic", false);

@@ -21,6 +21,8 @@ events) carry a `format_version` and follow the same rules.
 - The build logger (`LazyMsBuild.Logger.dll`) and method B: compile commands of every build,
   batches split per file, with the target architecture and `IncludePath` /
   `ExternalIncludePath` added.
+- `/Y-` after precompiled-header options in every entry, so that clang-tidy (which does not read
+  `.clangd`) works on sources that use a precompiled header.
 - Method A: `sync` through msbuild-extractor-sample, following `msbuild-extractor.json`.
 - One database per configuration, with upsert, rebuild replacement, and garbage collection by the
   project's source list; published atomically to `compile_commands.json`.

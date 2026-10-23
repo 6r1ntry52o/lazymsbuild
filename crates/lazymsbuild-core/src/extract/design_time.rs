@@ -221,6 +221,9 @@ pub fn read_output(path: &Path) -> Result<Vec<Entry>> {
         let name = Path::new(&e.file).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         name != ".msbuild-extractor-sample" && !e.arguments.first().is_some_and(|a| a.starts_with("generated-by:"))
     });
+    for entry in &mut entries {
+        super::cl::disable_pch(&mut entry.arguments);
+    }
     Ok(entries)
 }
 

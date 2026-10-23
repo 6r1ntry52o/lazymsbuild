@@ -54,6 +54,8 @@ B entry:
   command's own options. clang-cl documents `/imsvc` as "add directory to system include search
   path, as if part of %INCLUDE%", which is exactly how cl.exe received them.
 
+Entries of both methods also get `/Y-` after `/Yc` or `/Yu` (see clang-tidy below).
+
 Option C (`.binlog` converted by a separate tool) is not an extraction method: there is no
 `binlog2compilecommands` (GitHub search, 0 results). `build.keep_binlog` keeps a `.binlog` for
 MSBuild Structured Log Viewer.
@@ -142,6 +144,17 @@ maps exactly like its `.sln` (including x86 -> Win32 and `<Build Solution="Relea
   cl mode by itself: `--driver-mode=cl` is not needed.
 - `/Yu`, `/Yc` and `/Fp` did not cause errors in clangd 23 even without a `.clangd`. `init` still writes
   the `Remove` rule, for older clangd versions and other clang tools.
+
+### clang-tidy (19.1, from Visual Studio 2022's LLVM; 2026-10-24)
+
+- Without `-p` it finds `compile_commands.json` at the repository root, as clangd does.
+- It does not read `.clangd`, so precompiled headers broke it: with `/Yu`, "file 'x64\Debug\App.pch'
+  is not a valid precompiled PCH file" (the driver turns `/Yu` + `/Fp` into `-include-pch` of
+  MSVC's `.pch`); with `/Yc`, "expected exactly one compiler job" (building the PCH is a second job).
+- Every entry with `/Yc` or `/Yu` therefore gets `/Y-` after it. cl.exe and clang-cl both take it as
+  "ignore the other /Y options", so the entry stays a valid command for either, and clang tools parse
+  the source with its header included normally, as clangd does on its own. The build's `/Y` options
+  stay in the entry. Checked by `clang_tidy_reads_the_database_without_p`.
 - clangd does not watch `compile_commands.json`, not even when the client offers
   `workspace/didChangeWatchedFiles` registration. It reloads it lazily: the next request that needs a
   compile command (an edit, opening a file) logs `Reloaded compilation database` and uses the new

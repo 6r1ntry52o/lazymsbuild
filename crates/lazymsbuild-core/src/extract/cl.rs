@@ -9,6 +9,8 @@
 //! - the `IncludePath` and `ExternalIncludePath` directories, which MSBuild passes in the
 //!   `INCLUDE` and `EXTERNAL_INCLUDE` environment variables, as `/imsvc<dir>` (clang-cl: "add
 //!   directory to system include search path, as if part of %INCLUDE%").
+//!
+//! And `/Y-` after precompiled-header options, see [`disable_pch`].
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -186,6 +188,7 @@ pub fn entries(program: &str, args: &[String], context: &CompileContext<'_>, dir
             }
             arguments.push(file_text.clone());
             arguments.extend(link.iter().cloned());
+            disable_pch(&mut arguments);
             Entry {
                 directory: directory.clone(),
                 output: object_file(&compile, &file, context.directory),
@@ -194,6 +197,22 @@ pub fn entries(program: &str, args: &[String], context: &CompileContext<'_>, dir
             }
         })
         .collect()
+}
+
+/// Adds `/Y-` after the last `/Yc` or `/Yu`. Clang tools cannot read MSVC's `.pch`
+/// (clang-tidy: "not a valid precompiled PCH file"), and `/Yc` makes clang-cl plan two jobs, which
+/// clang-tidy refuses ("expected exactly one compiler job"); `/Y-`, which cl.exe and clang-cl both
+/// take as "ignore the other /Y options", has every tool parse the source without a precompiled
+/// header, as clangd does. The original options stay, so the entry still shows the build's.
+pub fn disable_pch(arguments: &mut Vec<String>) {
+    let is_y = |arg: &str, name: &str| {
+        arg.strip_prefix('/').or_else(|| arg.strip_prefix('-')).is_some_and(|option| option.starts_with(name))
+    };
+    let Some(last) = arguments.iter().rposition(|a| is_y(a, "Yc") || is_y(a, "Yu")) else { return };
+    if arguments.iter().any(|a| is_y(a, "Y-")) {
+        return;
+    }
+    arguments.insert(last + 1, "/Y-".to_string());
 }
 
 /// The `IncludePath` then `ExternalIncludePath` directories that exist, without repeats.
@@ -316,6 +335,26 @@ mod tests {
         let tails: Vec<Vec<&str>> =
             e.iter().map(|e| e.arguments[e.arguments.len() - 2..].iter().map(String::as_str).collect()).collect();
         assert_eq!(tails, [vec!["/Tp", r"C:\r\a.inl"], vec!["/Tc", r"C:\r\b.x"], vec!["/c", r"C:\r\c.cpp"]]);
+    }
+
+    #[test]
+    fn precompiled_headers_are_turned_off_for_clang_tools() {
+        let context = CompileContext::new(Path::new(r"C:\r"));
+        let e =
+            entries(CL, &args(r"/c /Yupch.h /Fpx64\Debug\App.pch /EHsc main.cpp"), &context, &mut DirCache::default());
+        let a = &e[0].arguments;
+        assert_eq!(a[3..6], ["/Yupch.h", "/Y-", r"/Fpx64\Debug\App.pch"], "{a:?}");
+
+        let mut yc: Vec<String> = ["cl.exe", "-Ycpch.h", "pch.cpp"].map(String::from).into();
+        disable_pch(&mut yc);
+        assert_eq!(yc, ["cl.exe", "-Ycpch.h", "/Y-", "pch.cpp"]);
+        // Once only, and nothing without a precompiled header.
+        disable_pch(&mut yc);
+        assert_eq!(yc.iter().filter(|a| *a == "/Y-").count(), 1);
+        let mut plain: Vec<String> = ["cl.exe", "/c", "/Y-", "/Yd", "core.cpp"].map(String::from).into();
+        let before = plain.clone();
+        disable_pch(&mut plain);
+        assert_eq!(plain, before);
     }
 
     #[test]

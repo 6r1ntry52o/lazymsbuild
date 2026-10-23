@@ -167,8 +167,9 @@ There are two ways to get compile commands out of MSBuild, and lazymsbuild uses 
 it compiled, replaces a project's entries when the project was rebuilt successfully, and drops
 the entries of files that left their project. MSBuild hands cl.exe some settings outside the
 command line (the *VC++ Directories*, the target architecture); lazymsbuild adds them to the
-entries so clang tools see what the compiler saw. `docs/design.md` has the details and the
-measurements behind them.
+entries so clang tools see what the compiler saw. Clang tools cannot use MSVC's precompiled
+headers, so entries that use one also get `/Y-`, and clang-tidy works on them too.
+`docs/design.md` has the details and the measurements behind them.
 
 ## Privacy
 
