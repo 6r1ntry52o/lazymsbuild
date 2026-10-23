@@ -84,6 +84,7 @@ pub struct Running {
 }
 
 /// What a task reports when it ends.
+#[allow(clippy::large_enum_variant, reason = "one message per task, never stored in bulk")]
 pub enum Done {
     Operation { kind: RunKind, result: Result<Outcome>, local: LocalState, elapsed: Duration },
     Check { profile: Profile, result: Result<Report> },
@@ -215,6 +216,8 @@ pub struct App {
     pub log: VecDeque<LogLine>,
     /// Lines scrolled up from the end; 0 follows the output.
     pub log_scroll: usize,
+    /// Width of the log pane at the last draw, for counting wrapped rows.
+    pub log_width: usize,
     pub diagnostics: Vec<Diagnostic>,
     pub diag_cursor: usize,
     pub tab: LogTab,
@@ -257,6 +260,7 @@ impl App {
             action_cursor: 0,
             log: VecDeque::new(),
             log_scroll: 0,
+            log_width: 80,
             diagnostics: Vec::new(),
             diag_cursor: 0,
             tab: LogTab::Log,
@@ -295,11 +299,12 @@ impl App {
         if self.log.len() == LOG_LIMIT {
             self.log.pop_front();
         }
-        self.log.push_back(LogLine { text, kind });
+        let text = if text.contains('\t') { text.replace('\t', "    ") } else { text };
         if self.log_scroll > 0 {
-            // Keep the view where it is while new lines arrive.
-            self.log_scroll = (self.log_scroll + 1).min(self.log.len());
+            // Keep the view where it is while new lines arrive: scrolling counts screen rows.
+            self.log_scroll += super::view::wrap(&text, self.log_width).len();
         }
+        self.log.push_back(LogLine { text, kind });
     }
 
     fn note(&mut self, text: String) {
@@ -532,11 +537,11 @@ impl App {
             return;
         }
         let project = self.target.map(|i| self.ws.solution.projects[i].clone());
-        if let Some(project) = &project {
-            if !project.builds_in(&self.active) {
-                self.notify(format!("{} is not built in {}", project.name, self.active), true);
-                return;
-            }
+        if let Some(project) = &project
+            && !project.builds_in(&self.active)
+        {
+            self.notify(format!("{} is not built in {}", project.name, self.active), true);
+            return;
         }
         let label = match &project {
             Some(p) => format!("{verb} {}", p.name),
@@ -849,11 +854,9 @@ impl App {
             Pane::Configs => self.config_cursor = clamp(self.config_cursor, self.profiles.len()),
             Pane::Actions => self.action_cursor = clamp(self.action_cursor, ACTIONS.len()),
             Pane::Log => match self.tab {
-                // Scrolling counts lines up from the end: "up" scrolls back.
-                LogTab::Log => {
-                    let max = self.log.len().saturating_sub(1) as isize;
-                    self.log_scroll = (self.log_scroll as isize - delta).clamp(0, max.max(0)) as usize;
-                }
+                // Scrolling counts screen rows up from the end: "up" scrolls back. Drawing stops
+                // it at the first line, since only drawing knows how lines wrap.
+                LogTab::Log => self.log_scroll = (self.log_scroll as isize - delta).max(0) as usize,
                 LogTab::Errors => self.diag_cursor = clamp(self.diag_cursor, self.diagnostics.len()),
             },
             Pane::Db => {}

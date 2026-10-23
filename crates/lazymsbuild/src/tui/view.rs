@@ -112,11 +112,16 @@ fn draw_pane(frame: &mut Frame, app: &mut App, theme: &Theme, pane: Pane, area: 
 }
 
 fn draw_targets(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bool) {
-    let mut title =
-        vec![Span::raw("[1] Solution & Targets"), Span::styled(format!(" · {}", app.target_label()), theme.dim())];
+    let mut title = vec![Span::raw("[1] Solution & Targets")];
     if app.filtering || !app.filter.is_empty() {
         title.push(Span::styled(format!(" /{}{}", app.filter, if app.filtering { "_" } else { "" }), theme.warning()));
     }
+    // What b / r / c act on, on the bottom border so a long name does not hide the filter.
+    let target = Line::from(vec![
+        Span::styled(" target: ", theme.dim()),
+        Span::styled(app.target_label(), theme.selected()),
+        Span::raw(" "),
+    ]);
     let items: Vec<ListItem> = app
         .rows
         .iter()
@@ -146,7 +151,7 @@ fn draw_targets(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused
         })
         .collect();
     let list = List::new(items)
-        .block(pane_block(Line::from(title), focused, theme))
+        .block(pane_block(Line::from(title), focused, theme).title_bottom(target))
         .highlight_style(theme.cursor(focused))
         .highlight_symbol("> ");
     let mut state = ListState::default().with_selected(Some(app.tree_cursor));
@@ -197,7 +202,7 @@ fn draw_actions(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-fn draw_log(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bool) {
+fn draw_log(frame: &mut Frame, app: &mut App, theme: &Theme, area: Rect, focused: bool) {
     let tab = |name: String, active: bool| {
         if active {
             Span::styled(name, Style::new().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
@@ -227,24 +232,37 @@ fn draw_log(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bo
 
     match app.tab {
         LogTab::Log => {
+            // Lines are wrapped at the pane width (paths make build output long). Only what the
+            // view needs is wrapped, from the end: the last `scroll + height` screen rows.
+            let width = (inner.width as usize).max(1);
             let height = inner.height as usize;
-            let end = app.log.len().saturating_sub(app.log_scroll);
-            let start = end.saturating_sub(height);
-            let lines: Vec<Line> = app
-                .log
-                .range(start..end)
-                .map(|l| {
-                    let style = match l.kind {
-                        LineKind::Normal => Style::new(),
-                        LineKind::Command => theme.dim(),
-                        LineKind::Note => theme.fg(Color::Cyan),
-                        LineKind::Error => theme.error(),
-                        LineKind::Warning => theme.warning(),
-                    };
-                    Line::styled(l.text.clone(), style)
-                })
-                .collect();
-            frame.render_widget(Paragraph::new(lines), inner);
+            app.log_width = width;
+            // `g` asks for the top with a huge scroll; it is cut down below once the top is reached.
+            let wanted = app.log_scroll.saturating_add(height);
+            let mut rows: Vec<Line> = Vec::with_capacity(wanted.min(4096)); // bottom row first
+            let mut reached_top = true;
+            for line in app.log.iter().rev() {
+                let style = match line.kind {
+                    LineKind::Normal => Style::new(),
+                    LineKind::Command => theme.dim(),
+                    LineKind::Note => theme.fg(Color::Cyan),
+                    LineKind::Error => theme.error(),
+                    LineKind::Warning => theme.warning(),
+                };
+                rows.extend(wrap(&line.text, width).into_iter().rev().map(|chunk| Line::styled(chunk, style)));
+                if rows.len() >= wanted {
+                    reached_top = false;
+                    break;
+                }
+            }
+            if reached_top {
+                // Scrolled past the first line: stop at the top.
+                app.log_scroll = app.log_scroll.min(rows.len().saturating_sub(height));
+            }
+            let start = app.log_scroll.min(rows.len());
+            let end = (start + height).min(rows.len());
+            let visible: Vec<Line> = rows[start..end].iter().rev().cloned().collect();
+            frame.render_widget(Paragraph::new(visible), inner);
         }
         LogTab::Errors => {
             if app.diagnostics.is_empty() {
@@ -279,24 +297,41 @@ fn draw_log(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bo
             let list = List::new(items).highlight_style(theme.cursor(focused));
             let mut state = ListState::default().with_selected(Some(app.diag_cursor));
             frame.render_stateful_widget(list, list_area, &mut state);
-            if detail_height > 0 {
-                if let Some(d) = app.diagnostics.get(app.diag_cursor) {
-                    let mut text = Text::default();
-                    text.push_line(Line::styled(d.to_msvc(), Style::new()));
-                    if d.file.is_some() {
-                        text.push_line(Line::styled(
-                            format!("{} opens it", app.keymap.label(Action::Edit)),
-                            theme.dim(),
-                        ));
-                    }
-                    let detail = Paragraph::new(text)
-                        .wrap(Wrap { trim: false })
-                        .block(Block::new().borders(ratatui::widgets::Borders::TOP).border_style(theme.dim()));
-                    frame.render_widget(detail, detail_area);
+            if detail_height > 0
+                && let Some(d) = app.diagnostics.get(app.diag_cursor)
+            {
+                let mut text = Text::default();
+                text.push_line(Line::styled(d.to_msvc(), Style::new()));
+                if d.file.is_some() {
+                    text.push_line(Line::styled(format!("{} opens it", app.keymap.label(Action::Edit)), theme.dim()));
                 }
+                let detail = Paragraph::new(text)
+                    .wrap(Wrap { trim: false })
+                    .block(Block::new().borders(ratatui::widgets::Borders::TOP).border_style(theme.dim()));
+                frame.render_widget(detail, detail_area);
             }
         }
     }
+}
+
+/// Splits a line into pieces of at most `width` display columns (wide characters count two).
+pub fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut used = 0;
+    for c in text.chars() {
+        let w = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+        if used + w > width && !current.is_empty() {
+            out.push(std::mem::take(&mut current));
+            used = 0;
+        }
+        current.push(c);
+        used += w;
+    }
+    if !current.is_empty() || out.is_empty() {
+        out.push(current);
+    }
+    out
 }
 
 fn file_name(path: &str) -> String {

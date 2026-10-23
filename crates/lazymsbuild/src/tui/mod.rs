@@ -3,6 +3,8 @@
 mod app;
 mod keys;
 mod tree;
+#[cfg(test)]
+mod ui_tests;
 mod view;
 
 use std::path::Path;
