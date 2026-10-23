@@ -3,7 +3,7 @@
 //!
 //! It is written while a build or sync runs (every second and on every state change) and once
 //! when it ends, always atomically. It is a public format with a version: see
-//! `docs/status-json.md`. Additions are backwards compatible; anything else bumps `format_version`.
+//! `docs/formats.md`. Additions are backwards compatible; anything else bumps `format_version`.
 
 use std::path::Path;
 

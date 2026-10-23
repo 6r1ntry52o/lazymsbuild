@@ -217,6 +217,21 @@ mod tests {
     }
 
     #[test]
+    fn vs_codes_ms_compile_matcher_reads_the_format() {
+        // The `$msCompile` problem matcher of VS Code (src/vs/workbench/contrib/tasks/common/problemMatcher.ts).
+        let matcher = Regex::new(
+            r"^(?:\s*\d+>)?(\S.*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+((?:fatal +)?error|warning|info)\s+(\w+\d+)\s*:\s*(.*)$",
+        )
+        .unwrap();
+        let d = parse_line(r"C:\src\dir with space\main.cpp(7,13): fatal error C1083: Cannot open include file: 'x.h'")
+            .unwrap();
+        let line = d.to_msvc();
+        let caps = matcher.captures(&line).expect("errors.txt lines match $msCompile");
+        assert_eq!(&caps[1], r"C:\src\dir with space\main.cpp");
+        assert_eq!((&caps[2], &caps[3], &caps[4]), ("7,13", "error", "C1083"));
+    }
+
+    #[test]
     fn collector_drops_repeats() {
         let mut c = Collector::default();
         let d = parse_line(r"C:\a.cpp(1,1): warning C4100: x").unwrap();

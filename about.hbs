@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>lazymsbuild: third-party licenses</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    pre { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; font-size: 0.85rem; }
+    @media (prefers-color-scheme: dark) { body { background: #1e1e1e; color: #ddd; } pre { background: #2a2a2a; } a { color: #8ab4f8; } }
+  </style>
+</head>
+<body>
+  <h1>Third-party licenses</h1>
+  <p>lazymsbuild.exe contains the following Rust crates, unmodified. Their source code is on
+     <a href="https://crates.io">crates.io</a> under each crate's name and version.</p>
+  <h2>Licenses</h2>
+  <ul>
+    {{#each overview}}<li><a href="#{{id}}">{{name}}</a> ({{count}})</li>{{/each}}
+  </ul>
+  {{#each licenses}}
+  <h3 id="{{id}}">{{name}}</h3>
+  <p>Used by:
+    {{#each used_by}}<a href="https://crates.io/crates/{{crate.name}}/{{crate.version}}">{{crate.name}} {{crate.version}}</a>{{#unless @last}}, {{/unless}}{{/each}}
+  </p>
+  <pre>{{text}}</pre>
+  {{/each}}
+</body>
+</html>

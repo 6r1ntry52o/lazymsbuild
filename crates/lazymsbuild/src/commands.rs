@@ -23,14 +23,25 @@ use crate::cli::{
 };
 use crate::style::{self, say};
 
+fn start_dir(global: &Global) -> Result<std::path::PathBuf> {
+    match &global.dir {
+        Some(dir) => Ok(dir.clone()),
+        None => std::env::current_dir().context("cannot read the current directory"),
+    }
+}
+
 pub fn open_workspace(global: &Global) -> Result<Workspace> {
-    let start = match &global.dir {
-        Some(dir) => dir.clone(),
-        None => std::env::current_dir().context("cannot read the current directory")?,
-    };
-    let workspace = Workspace::open(&OpenOptions { start, solution: global.solution.clone(), ..Default::default() })?;
+    let start = start_dir(global)?;
+    let mut workspace =
+        Workspace::open(&OpenOptions { start, solution: global.solution.clone(), ..Default::default() })?;
     for warning in &workspace.warnings {
         eprintln!("{} {warning}", style::yellow("warning:"));
+    }
+    // A solution chosen with --solution is the one later commands, and editors, find by default.
+    if global.solution.is_some()
+        && let Err(err) = workspace.remember_solution()
+    {
+        eprintln!("{} {err:#}", style::yellow("warning:"));
     }
     Ok(workspace)
 }
@@ -127,9 +138,10 @@ impl Printer {
         if self.json {
             return;
         }
+        // With -q, the errors and warnings are printed once at the end, from the final list (the
+        // logger's when it ran), instead of the full output.
         match event {
             Event::Line(line) if self.quiet == 0 => say!("{line}"),
-            Event::Diagnostic(d) if self.quiet == 1 => say!("{}", diagnostic_line(&d)),
             Event::Note(note) if self.quiet < 2 => say!("{}", style::dim(&format!("lazymsbuild: {note}"))),
             _ => {}
         }
@@ -289,6 +301,11 @@ pub async fn build(global: &Global, args: &BuildArgs) -> Result<i32> {
     if global.json {
         print_json(&outcome_json(&workspace, &outcome, &started));
     } else {
+        if global.quiet == 1 {
+            for d in &outcome.diagnostics {
+                say!("{}", diagnostic_line(d));
+            }
+        }
         print_summary(&request.verb.to_string(), &workspace, &outcome, clock.elapsed());
     }
     Ok(exit_code(&outcome))
@@ -420,8 +437,15 @@ pub fn check(global: &Global, args: &ProfileArg) -> Result<i32> {
 // --- doctor -----------------------------------------------------------------------------------
 
 pub fn doctor(global: &Global, args: &DoctorArgs) -> Result<i32> {
-    let workspace = open_workspace(global)?;
-    let report = doctor::run(&workspace, &doctor::Options { report: args.report, ..Default::default() });
+    let options = doctor::Options { report: args.report, ..Default::default() };
+    // Without a solution, the tools are still worth checking.
+    let report = match open_workspace(global) {
+        Ok(workspace) => doctor::run(&workspace, &options),
+        Err(err) => {
+            let start = std::path::absolute(start_dir(global)?)?;
+            doctor::run_without_solution(&start, &err, None, &options)
+        }
+    };
     let code = if report.worst() == Level::Fail { 1 } else { 0 };
     if global.json {
         print_json(&serde_json::to_value(&report)?);
@@ -435,7 +459,11 @@ pub fn doctor(global: &Global, args: &DoctorArgs) -> Result<i32> {
     }
     let width = report.items.iter().map(|i| i.name.chars().count()).max().unwrap_or(10);
     for item in &report.items {
-        say!("  {} {:width$}  {}", symbol(item.level), item.name, item.detail);
+        let mut detail = item.detail.lines();
+        say!("  {} {:width$}  {}", symbol(item.level), item.name, detail.next().unwrap_or_default());
+        for line in detail {
+            say!("    {:width$}  {line}", "");
+        }
         if let Some(hint) = &item.hint {
             for line in hint.lines() {
                 say!("    {:width$}  {}", "", style::dim(line));
@@ -460,6 +488,7 @@ pub fn path(global: &Global, args: &PathArgs) -> Result<i32> {
         print_path_value(global, "state", &workspace.state_dir);
     } else if global.json {
         print_json(&json!({
+            "format_version": 1,
             "solution": workspace.solution.path,
             "root": workspace.root,
             "mode": init::mode_name(workspace.output_mode()),

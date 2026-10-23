@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/6r1ntry52o/lazymsbuild/main/schema/config.schema.json",
+  "title": "lazymsbuild configuration",
+  "description": "config.toml and .lazymsbuild.toml of lazymsbuild. See docs/config.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "The version of this format.",
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "solution": {
+      "description": "The solution to use, relative to the repository root, when there are several.",
+      "type": "string"
+    },
+    "profile": {
+      "description": "The configuration to start with, Configuration|Platform.",
+      "type": "string",
+      "pattern": "^[^|]+\\|[^|]+$"
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "msbuild": { "description": "MSBuild.exe. Empty: found with vswhere.", "type": "string" },
+        "parallel": { "description": "Build projects in parallel (-m).", "type": "boolean", "default": true },
+        "max_cpu_count": { "description": "-m:<n>; 0 lets MSBuild decide.", "type": "integer", "minimum": 0, "default": 0 },
+        "verbosity": {
+          "description": "MSBuild's console verbosity in the log.",
+          "enum": ["quiet", "minimal", "normal", "detailed", "diagnostic"],
+          "default": "minimal"
+        },
+        "extra_args": {
+          "description": "Added to every MSBuild command line. No argument may contain a double quote.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[^\"]*$" },
+          "default": []
+        },
+        "english": { "description": "English messages from MSBuild and the compiler.", "type": "boolean", "default": true },
+        "keep_binlog": { "description": "Also write a binary log (-bl) of each build.", "type": "boolean", "default": false },
+        "code_page": { "description": "Code page of build output that is not UTF-8; 0 is the OEM code page.", "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "extractor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "design_time": { "description": "msbuild-extractor-sample.exe for sync, or \"off\".", "type": "string" },
+        "logger": { "description": "LazyMsBuild.Logger.dll, or \"off\".", "type": "string" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "repo-root: the database goes into the repository. external: into the state directory.",
+          "enum": ["repo-root", "external"],
+          "default": "repo-root"
+        },
+        "path": {
+          "description": "In repo-root mode, the database's path relative to the repository root.",
+          "type": "string",
+          "default": "compile_commands.json"
+        },
+        "format": {
+          "description": "arguments (recommended) or command.",
+          "enum": ["arguments", "command"],
+          "default": "arguments"
+        }
+      }
+    },
+    "init": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore": {
+          "description": "How init keeps generated files out of Git.",
+          "enum": ["exclude", "gitignore", "none"],
+          "default": "exclude"
+        }
+      }
+    },
+    "clangd": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "description": "clangd.exe for doctor. Empty: searched for.", "type": "string" }
+      }
+    },
+    "logs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "keep": { "description": "How many build logs to keep.", "type": "integer", "minimum": 1, "default": 20 }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "edit_at_line": {
+          "description": "The command e runs for an error, with {file}, {line} and {column}.",
+          "type": "string"
+        }
+      }
+    },
+    "keys": {
+      "description": "TUI key bindings: an action takes a key or a list of keys.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pane_1": { "$ref": "#/definitions/keys" },
+        "pane_2": { "$ref": "#/definitions/keys" },
+        "pane_3": { "$ref": "#/definitions/keys" },
+        "pane_4": { "$ref": "#/definitions/keys" },
+        "pane_5": { "$ref": "#/definitions/keys" },
+        "next_pane": { "$ref": "#/definitions/keys" },
+        "prev_pane": { "$ref": "#/definitions/keys" },
+        "up": { "$ref": "#/definitions/keys" },
+        "down": { "$ref": "#/definitions/keys" },
+        "top": { "$ref": "#/definitions/keys" },
+        "bottom": { "$ref": "#/definitions/keys" },
+        "page_up": { "$ref": "#/definitions/keys" },
+        "page_down": { "$ref": "#/definitions/keys" },
+        "prev_tab": { "$ref": "#/definitions/keys" },
+        "next_tab": { "$ref": "#/definitions/keys" },
+        "select": { "$ref": "#/definitions/keys" },
+        "filter": { "$ref": "#/definitions/keys" },
+        "help": { "$ref": "#/definitions/keys" },
+        "menu": { "$ref": "#/definitions/keys" },
+        "build": { "$ref": "#/definitions/keys" },
+        "rebuild": { "$ref": "#/definitions/keys" },
+        "clean": { "$ref": "#/definitions/keys" },
+        "sync": { "$ref": "#/definitions/keys" },
+        "parallel": { "$ref": "#/definitions/keys" },
+        "edit": { "$ref": "#/definitions/keys" },
+        "cancel": { "$ref": "#/definitions/keys" },
+        "close": { "$ref": "#/definitions/keys" },
+        "quit": { "$ref": "#/definitions/keys" }
+      }
+    }
+  },
+  "definitions": {
+    "keys": {
+      "oneOf": [
+        { "type": "string", "description": "A key: b, G, ctrl+u, shift+tab, enter, space, esc, up, f5, ..." },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      ]
+    }
+  }
+}

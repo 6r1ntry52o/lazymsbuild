@@ -8,7 +8,7 @@
 //! profiles\<solution>-<hash>\         one folder per solution
 //!   <Config>_<Platform>.json          the configuration's database (the master copy)
 //!   <Config>_<Platform>.meta.json     entry -> project, source (A/B), times, last build
-//! status.json                          what the build is doing (docs/status-json.md)
+//! status.json                          what the build is doing (docs/formats.md)
 //! errors.txt                           errors and warnings of the last build, MSVC format
 //! logs\<stamp>.log                     build logs (the newest `logs.keep`)
 //! tmp\                                 logger output, extractor output

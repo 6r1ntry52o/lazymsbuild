@@ -1,0 +1,6 @@
+# cargo-about: the licenses of the crates compiled into lazymsbuild.exe (THIRD_PARTY_LICENSES.html
+# in each release archive). The release workflow fails when a crate uses a license not listed here.
+accepted = ["MIT", "Apache-2.0", "MPL-2.0", "Zlib", "BSL-1.0", "Unicode-3.0", "Unlicense"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true

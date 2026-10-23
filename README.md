@@ -1,24 +1,34 @@
 # lazymsbuild
 
+English | [日本語](README.ja.md)
+
 A [lazygit](https://github.com/jesseduffield/lazygit)-style terminal UI for MSBuild that keeps
 `compile_commands.json` complete, so that clangd (and clang-tidy, and every editor that uses them)
 understands a Visual Studio C++ solution: its include paths, its defines, all of its files.
 
 ```text
-+-[1] Solution & Targets ------------+-[4] Log | Errors (E:0 W:3) --------------+
-| > [Solution] MySolution.sln        |   core.cpp                                |
-|   ├─ Libs/                         |   MyApp.Core.vcxproj -> ...\MyApp.Core.lib|
-|   │   └─ CoreEngine                | Build succeeded.                          |
-|   ├─ ControlApp                    |                                           |
-+-[2] Configuration / Platform ------+                                           |
-| * Debug   | x64                    |                                           |
-|   Release | x64                    |                                           |
-+-[3] Actions & Options -------------+-[5] clangd DB Status ---------------------+
-| b Build  r Rebuild  c Clean        | Profile  : Debug|x64                      |
-| s Sync   m Parallel (-m) : ON      | Entries  : 342 (+2)   Coverage: 342/350   |
-|                                    | Stale    : none       Updated : 12:03:11  |
-+------------------------------------+-------------------------------------------+
- b build · r rebuild · s sync · x menu · ? help
+╭[1] Solution & Targets────────────╮╭[4] Log | Errors (E:0 W:0)────────────────────────────────╮
+│> [Solution] Demo.sln ●           ││  core.cpp                                                │
+│  ├─ Libs/                        ││  engine.cpp                                              │
+│  │   └─ CoreEngine               ││  CoreEngine.vcxproj -> C:\src\demo\x64\Debug\CoreEngine.l│
+│  ├─ Tools/                       ││ib                                                        │
+│  │   └─ Updater                  ││  updater.c                                               │
+│  └─ ControlApp                   ││  Updater.vcxproj -> C:\src\demo\x64\Debug\Updater.exe    │
+╰ target: [Solution] Demo.sln ─────╯│  pch.cpp                                                 │
+╭[2] Configuration / Platform──────╮│  main.cpp                                                │
+│* Debug   | x64                   ││  window.cpp                                              │
+│  Debug   | x86                   ││  ControlApp.vcxproj -> C:\src\demo\x64\Debug\ControlApp.e│
+│  Release | x64                   ││xe                                                        │
+│  Release | x86                   ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
+╰──────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+╭[3] Actions & Options─────────────╮╭[5] clangd DB Status──────────────────────────────────────╮
+│ b Build                          ││Profile  : Debug|x64            Mode     : repo-root      │
+│ r Rebuild                        ││Entries  : 6 (+6)               Coverage : 6/6            │
+│ c Clean                          ││Stale    : none                 Updated  : 12:03:11       │
+│ s Sync (no build)                ││Source   : build 6              Output   : ✔ published    │
+│ m Parallel (-m) : ON             ││File     : compile_commands.json                          │
+╰──────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+b build · r rebuild · c clean · s sync · x menu · ? help · q quit
 ```
 
 - **Builds like Visual Studio.** The solution is always the entry point, so the solution's
@@ -38,7 +48,8 @@ understands a Visual Studio C++ solution: its include paths, its defines, all of
 ## Requirements
 
 - Windows 10 or 11 (x64 or ARM64)
-- Visual Studio 2019 or later, or the Build Tools, with *Desktop development with C++*
+- Visual Studio 2019 or later, or the Build Tools, with *Desktop development with C++* (tested
+  with Visual Studio 2022)
 - C++ projects (`.vcxproj`) in a `.sln` or `.slnx`; x86, x64 and ARM64 platforms
 - For `sync`: Microsoft's [msbuild-extractor-sample](https://github.com/microsoft/msbuild-extractor-sample)
   (`scripts/install-extractor.ps1` installs it). Without it, a rebuild fills the database instead.
@@ -46,12 +57,16 @@ understands a Visual Studio C++ solution: its include paths, its defines, all of
 
 ## Install
 
-- **GitHub Releases**: download `lazymsbuild-v<version>-x86_64-pc-windows-msvc.zip`, check it
-  against `SHA256SUMS`, and put `lazymsbuild.exe` and `LazyMsBuild.Logger.dll` (it must stay next
-  to the exe) in a directory on your `PATH`.
-- **cargo**: `cargo binstall lazymsbuild` installs the release archive. `cargo install lazymsbuild`
-  builds the exe only; build the logger with `dotnet build logger -c Release` from a clone and
-  point `extractor.logger` at `LazyMsBuild.Logger.dll` (see `docs/config.md`).
+- **GitHub Releases**: download `lazymsbuild-v<version>-x86_64-pc-windows-msvc.zip` (or
+  `aarch64-pc-windows-msvc`), check it against `SHA256SUMS`
+  (`Get-FileHash <zip> -Algorithm SHA256`), and put `lazymsbuild.exe` and
+  `LazyMsBuild.Logger.dll` (it must stay next to the exe) in a directory on your `PATH`. The
+  archive also has `install-extractor.ps1`, for `sync`.
+- **cargo**: `cargo binstall lazymsbuild` downloads the release's exe, `cargo install lazymsbuild`
+  builds it; both install `lazymsbuild.exe` only. For builds to update the database, also put
+  `LazyMsBuild.Logger.dll` next to it (from the release archive), or build the logger with
+  `dotnet build logger -c Release` in a clone and point `extractor.logger` at it
+  (see [docs/config.md](docs/config.md)). `lazymsbuild doctor` says whether it is found.
 - **[dotfiles-windows](https://github.com/6r1ntry52o/dotfiles-windows)**: `install.ps1` installs a
   pinned release and sets up Neovim.
 
@@ -72,8 +87,9 @@ From then on, build from the TUI or with `lazymsbuild build`, and the database f
 
 ## The TUI
 
-`lazymsbuild` with no command starts it. The keys follow lazygit; every one can be changed in
-`[keys]` of the configuration.
+`lazymsbuild` with no command starts it. Pick a target in pane 1 (the whole solution, or one
+project; it is shown under the list) and a configuration in pane 2, then build. The keys follow
+lazygit; every one can be changed in `[keys]` of the configuration.
 
 | Key | Action |
 |---|---|
@@ -87,7 +103,7 @@ From then on, build from the TUI or with `lazymsbuild build`, and the database f
 | `b`, `r`, `c` | Build, Rebuild, Clean (Clean asks first) |
 | `s` | Sync (fill the database without building) |
 | `m` | Toggle parallel builds (`-m`) |
-| `e` | Open the selected error in `$EDITOR` (or `$VISUAL`, or the default application) |
+| `e` | Open the selected error in your editor at its line (`ui.edit_at_line`, else `$EDITOR`, `$VISUAL`, the default application) |
 | `Ctrl+c` | Cancel the build (asks first); quit when idle |
 | `Esc` | Close a filter or a menu |
 | `q` | Quit (asks first during a build) |
@@ -109,7 +125,7 @@ build, a configuration switch, Clean and Sync wait until it ends.
 | `lazymsbuild completions <shell>` | Shell completion script (powershell, bash, zsh, fish, elvish) |
 
 Common options: `--json` (machine-readable output), `-C <dir>` (as `git -C`), `--solution <file>`
-(when a repository has several), `-q`, `-v`. Exit codes: `0` success, `1` failure (a failed build,
+(when a repository has several; later commands and editors then use the same one), `-q`, `-v`. Exit codes: `0` success, `1` failure (a failed build,
 problems found), `2` wrong usage. Configurations are written `Configuration|Platform`; quote them
 in a shell (`--profile "Release|x64"`). `--profile` also makes that configuration the active one.
 
@@ -119,7 +135,7 @@ In the repository (repo-root mode, the default):
 
 | File | |
 |---|---|
-| `compile_commands.json` | The active configuration's database (`output.path` can move it, e.g. to `build/`) |
+| `compile_commands.json` | The active configuration's database. `output.path` can move it, e.g. to `build/`: clangd finds it there too, clang-tidy then needs `-p build` |
 | `.clangd` | Written by `init` when missing; tells clangd to drop MSVC precompiled-header flags |
 | `.cache/clangd/` | clangd's index (clangd creates it) |
 
@@ -173,6 +189,16 @@ solutions.
   `:CompileCommands` setup) that clangd may read; delete it.
 - **A project cannot be built on its own** in some configuration: the solution configuration does
   not build it, so MSBuild has no target for it.
+
+## Documentation
+
+- [docs/config.md](docs/config.md): every setting, key and environment variable
+- [docs/editors/lazyvim.md](docs/editors/lazyvim.md): LazyVim: clangd, `:CompileCommands`,
+  quickfix, a notification when a build ends, the TUI in a floating terminal
+- [docs/editors/vscode.md](docs/editors/vscode.md): VS Code with the clangd extension and a build task
+- [docs/formats.md](docs/formats.md): `lazymsbuild path`, `status.json`, `errors.txt` and the
+  database files, for editor integrations and scripts
+- [docs/design.md](docs/design.md): how it works and why, with the measurements behind it
 
 ## Contributing
 

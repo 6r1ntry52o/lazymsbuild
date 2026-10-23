@@ -410,6 +410,30 @@ mod tests {
         assert_eq!(keymap.labels(Action::Build), "", "the help no longer shows b for build");
     }
 
+    /// schema/config.schema.json lists every setting and every action, and nothing else.
+    #[test]
+    fn the_json_schema_matches_the_settings() {
+        let schema: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../schema/config.schema.json")).unwrap(),
+        )
+        .unwrap();
+        let names = |value: &serde_json::Value| -> Vec<String> {
+            let mut v: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
+            v.sort();
+            v
+        };
+        let defaults = serde_json::to_value(lazymsbuild_core::config::Config::default()).unwrap();
+        assert_eq!(names(&schema["properties"]), names(&defaults), "top-level keys");
+        for (table, value) in defaults.as_object().unwrap() {
+            if value.is_object() && table != "keys" {
+                assert_eq!(names(&schema["properties"][table]["properties"]), names(value), "[{table}]");
+            }
+        }
+        let mut actions: Vec<String> = Action::ALL.iter().map(|a| a.name().to_string()).collect();
+        actions.sort();
+        assert_eq!(names(&schema["properties"]["keys"]["properties"]), actions, "[keys]");
+    }
+
     #[test]
     fn labels() {
         assert_eq!(Key::parse("shift+tab").unwrap().label(), "Shift+Tab");

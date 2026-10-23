@@ -1,18 +1,19 @@
 //! `lazymsbuild doctor`: is everything in place for clangd to use the database (spec §7-4)?
 //!
-//! With `report`, the output is meant for an issue: absolute paths are masked and no project or
-//! file name appears, only counts.
+//! With `report`, the output is meant for an issue: absolute paths are masked and no project,
+//! file or configuration name appears, only counts.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 use crate::check::{self, IgnoreState, SyncState};
-use crate::clangd;
-use crate::config::OutputMode;
+use crate::config::{self, Config, OutputMode};
 use crate::extract::{build_log, design_time};
 use crate::msbuild::locate;
+use crate::solution::{self, Profile};
 use crate::workspace::Workspace;
+use crate::{clangd, git};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -57,35 +58,49 @@ impl Default for Options {
     }
 }
 
-struct Items<'a> {
+struct Items {
     items: Vec<Item>,
-    workspace: &'a Workspace,
+    /// What `report` replaces, in order: (path, placeholder).
+    masks: Vec<(PathBuf, &'static str)>,
     report: bool,
 }
 
-impl Items<'_> {
+impl Items {
+    /// `state_dir` is masked before `root`, and both before the home directory that holds them.
+    fn new(report: bool, state_dir: Option<&Path>, root: &Path) -> Items {
+        let mut masks: Vec<(PathBuf, &'static str)> = Vec::new();
+        if let Some(dir) = state_dir {
+            masks.push((dir.to_path_buf(), "<state>"));
+        }
+        masks.push((root.to_path_buf(), "<repo>"));
+        if let Some(home) = dirs::home_dir() {
+            masks.push((home, "~"));
+        }
+        Items { items: Vec::new(), masks, report }
+    }
+
     fn push(&mut self, name: &str, level: Level, detail: impl Into<String>, hint: Option<String>) {
         let mut detail = detail.into();
         let mut hint = hint;
         if self.report {
-            detail = mask(&detail, self.workspace);
-            hint = hint.map(|h| mask(&h, self.workspace));
+            detail = mask(&detail, &self.masks);
+            hint = hint.map(|h| mask(&h, &self.masks));
         }
         self.items.push(Item { name: name.into(), level, detail, hint });
     }
 
     fn path(&self, path: &Path) -> String {
-        if self.report { mask(&path.display().to_string(), self.workspace) } else { path.display().to_string() }
+        if self.report { mask(&path.display().to_string(), &self.masks) } else { path.display().to_string() }
     }
 }
 
-/// Replaces the repository root, the state directory and the home directory in `text`.
-pub fn mask(text: &str, workspace: &Workspace) -> String {
+/// Replaces each path of `masks` in `text`, ignoring ASCII case.
+fn mask(text: &str, masks: &[(PathBuf, &str)]) -> String {
     let mut out = text.to_string();
-    let mut replace = |path: &Path, with: &str| {
+    for (path, with) in masks {
         let needle = path.display().to_string();
         if needle.len() < 3 {
-            return;
+            continue;
         }
         // ASCII-only lowering keeps byte offsets equal between the two strings.
         let lower = out.to_ascii_lowercase();
@@ -99,27 +114,61 @@ pub fn mask(text: &str, workspace: &Workspace) -> String {
         }
         result.push_str(&out[last..]);
         out = result;
-    };
-    replace(&workspace.state_dir, "<state>");
-    replace(&workspace.root, "<repo>");
-    if let Some(home) = dirs::home_dir() {
-        replace(&home, "~");
     }
     out
 }
 
-pub fn run(workspace: &Workspace, options: &Options) -> Report {
-    let mut items = Items { items: Vec::new(), workspace, report: options.report };
-    let solution = &workspace.solution;
-
-    // Configuration
-    let files: Vec<String> = workspace.config_files.iter().map(|f| items.path(f)).collect();
-    if workspace.warnings.is_empty() {
+fn configuration(items: &mut Items, files: &[PathBuf], warnings: &[String]) {
+    let files: Vec<String> = files.iter().map(|f| items.path(f)).collect();
+    if warnings.is_empty() {
         let detail = if files.is_empty() { "defaults (no configuration file)".to_string() } else { files.join(", ") };
         items.push("configuration", Level::Ok, detail, None);
     } else {
-        items.push("configuration", Level::Warn, workspace.warnings.join("; "), Some("see docs/config.md".into()));
+        items.push("configuration", Level::Warn, warnings.join("; "), Some("see docs/config.md".into()));
     }
+}
+
+/// Without a solution (none found, several, or one that cannot be read), the checks that do not
+/// need one, so that `doctor` still says whether MSBuild, the extractors and clangd are in place.
+/// `error` is why the workspace did not open; `user_config_dir` as in `OpenOptions`.
+pub fn run_without_solution(
+    start: &Path,
+    error: &anyhow::Error,
+    user_config_dir: Option<&Path>,
+    options: &Options,
+) -> Report {
+    // As Workspace::open sees it, so that the paths in `error` are masked.
+    let start = &crate::paths::normalize(start);
+    let git_root = git::find_root(start);
+    let root = git_root.clone().unwrap_or_else(|| start.to_path_buf());
+    let mut items = Items::new(options.report, None, &root);
+    let config = match config::load(user_config_dir, git_root.as_deref()) {
+        Ok(loaded) => {
+            configuration(&mut items, &loaded.files, &loaded.warnings);
+            loaded.config
+        }
+        Err(err) => {
+            items.push("configuration", Level::Fail, format!("{err:#}"), Some("see docs/config.md".into()));
+            Config::default()
+        }
+    };
+    let found = solution::find_solutions(start, git_root.as_deref()).len();
+    let (detail, hint) = match found {
+        0 => ("no .sln or .slnx found".to_string(), "run doctor in a solution's directory, or pass -C <dir>"),
+        1 if options.report => ("the solution cannot be read (doctor without --report says why)".to_string(), ""),
+        1 => (format!("{error:#}"), ""),
+        n if options.report => (format!("{n} solutions found"), "choose one with --solution"),
+        _ => (format!("{error:#}"), "choose one with --solution"),
+    };
+    items.push("solution", Level::Fail, detail, (!hint.is_empty()).then(|| hint.to_string()));
+    tools(&mut items, &config, None, &root);
+    Report { lazymsbuild: env!("CARGO_PKG_VERSION").to_string(), items: items.items }
+}
+
+pub fn run(workspace: &Workspace, options: &Options) -> Report {
+    let mut items = Items::new(options.report, Some(&workspace.state_dir), &workspace.root);
+    let solution = &workspace.solution;
+    configuration(&mut items, &workspace.config_files, &workspace.warnings);
 
     // Solution
     let profile = workspace.active_profile().ok();
@@ -141,13 +190,25 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
         (cpp == 0).then(|| "the solution has no .vcxproj".into()),
     );
 
+    let clangd_exe = tools(&mut items, &workspace.config, solution.visual_studio_major(), &workspace.root);
+    workspace_checks(&mut items, workspace, profile.as_ref(), clangd_exe.as_ref(), options);
+    Report { lazymsbuild: env!("CARGO_PKG_VERSION").to_string(), items: items.items }
+}
+
+/// MSBuild, the two extractors and clangd. Returns clangd, for the analysis.
+fn tools(
+    items: &mut Items,
+    config: &Config,
+    visual_studio_major: Option<u32>,
+    root: &Path,
+) -> Option<(PathBuf, &'static str)> {
     // MSBuild
-    match locate::locate(workspace.config.build.msbuild.as_deref(), solution.visual_studio_major()) {
+    match locate::locate(config.build.msbuild.as_deref(), visual_studio_major) {
         Ok(msbuild) => {
             let version = locate::version(&msbuild.exe).unwrap_or_else(|_| "?".into());
             let instance =
                 msbuild.instance.as_ref().map(|i| format!(" ({} {})", i.display_name, i.version)).unwrap_or_default();
-            let mismatch = match (solution.visual_studio_major(), msbuild.instance.as_ref().and_then(|i| i.major())) {
+            let mismatch = match (visual_studio_major, msbuild.instance.as_ref().and_then(|i| i.major())) {
                 (Some(wanted), Some(found)) if wanted != found => {
                     Some(format!("the solution was saved by Visual Studio {wanted}, the build uses {found}"))
                 }
@@ -168,7 +229,7 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
     }
 
     // Design-time extractor
-    match design_time::find(workspace.config.extractor.design_time.as_deref(), &workspace.root) {
+    match design_time::find(config.extractor.design_time.as_deref(), root) {
         design_time::Lookup::Found { exe, origin } => {
             let version = extractor_version(&exe);
             let hostfxr = exe.parent().is_some_and(|d| d.join("hostfxr.dll").is_file());
@@ -198,7 +259,7 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
     }
 
     // Build logger
-    match build_log::find_logger(workspace.config.extractor.logger.as_deref()) {
+    match build_log::find_logger(config.extractor.logger.as_deref()) {
         build_log::Lookup::Found(dll) => items.push("build logger", Level::Ok, items.path(&dll), None),
         build_log::Lookup::Disabled => items.push("build logger", Level::Info, "off: builds do not update the database", None),
         build_log::Lookup::Missing(tried) => items.push(
@@ -206,14 +267,14 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
             Level::Warn,
             format!("{} not found: builds do not update the database", build_log::LOGGER_DLL),
             Some(format!(
-                "it ships next to lazymsbuild.exe in the release archive; with `cargo install`, build logger/ with `dotnet build -c Release` and set extractor.logger (tried {})",
+                "it ships next to lazymsbuild.exe in the release archive; after `cargo install` or `cargo binstall`, copy it from the archive next to lazymsbuild.exe, or build logger/ with `dotnet build -c Release` and set extractor.logger (tried {})",
                 tried.iter().map(|p| items.path(p)).collect::<Vec<_>>().join(", ")
             )),
         ),
     }
 
     // clangd
-    let clangd_exe = clangd::find(workspace.config.clangd.path.as_deref());
+    let clangd_exe = clangd::find(config.clangd.path.as_deref());
     match &clangd_exe {
         Some((exe, origin)) => {
             let version = clangd::version(exe).unwrap_or_else(|e| format!("cannot run: {e:#}"));
@@ -226,14 +287,28 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
             Some("install clangd (LLVM releases, or :MasonInstall clangd in Neovim) or set clangd.path".into()),
         ),
     }
+    clangd_exe
+}
+
+/// The database, the analysis, the clangd configuration and Git.
+fn workspace_checks(
+    items: &mut Items,
+    workspace: &Workspace,
+    profile: Option<&Profile>,
+    clangd_exe: Option<&(PathBuf, &'static str)>,
+    options: &Options,
+) {
+    let solution = &workspace.solution;
 
     // Database
-    let check = profile.as_ref().and_then(|p| check::run(workspace, p).ok());
-    match (&profile, &check) {
+    let check = profile.and_then(|p| check::run(workspace, p).ok());
+    match (profile, &check) {
         (Some(p), Some(c)) => {
             let problems = c.problems();
+            // A configuration name can be a product's, so a report leaves it out.
+            let configuration = if options.report { "active configuration".to_string() } else { p.to_string() };
             let summary = format!(
-                "{p}: {} entries, coverage {}/{}, {} stale, {}",
+                "{configuration}: {} entries, coverage {}/{}, {} stale, {}",
                 c.entries,
                 c.coverage.covered,
                 c.coverage.total,
@@ -265,7 +340,7 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
     }
 
     // Analysis: clangd --check on the first source of the first projects.
-    if let (Some((exe, _)), Some(p)) = (&clangd_exe, &profile) {
+    if let (Some((exe, _)), Some(p)) = (clangd_exe, profile) {
         let (projects, _) = check::load_projects(workspace);
         let external = (workspace.output_mode() == OutputMode::External).then(|| workspace.output_dir());
         let mut checked = 0;
@@ -381,8 +456,6 @@ pub fn run(workspace: &Workspace, options: &Options) -> Report {
             );
         }
     }
-
-    Report { lazymsbuild: env!("CARGO_PKG_VERSION").to_string(), items: items.items }
 }
 
 fn extractor_version(exe: &Path) -> String {

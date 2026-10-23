@@ -1,0 +1,96 @@
+name: Release
+
+# Push a tag v<version> (the version in Cargo.toml, with a "## [<version>]" section in CHANGELOG.md).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  archive:
+    name: ${{ matrix.target }}
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      - name: The tag matches Cargo.toml
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "tag ${{ github.ref_name }} != Cargo.toml version $version" }
+
+      - name: Build the logger
+        run: dotnet build logger -c Release
+
+      - name: Build lazymsbuild
+        run: cargo build --release --locked -p lazymsbuild --target ${{ matrix.target }}
+
+      - name: Third-party licenses
+        run: |
+          cargo install cargo-about --locked --features cli
+          cargo about generate --fail about.hbs -o THIRD_PARTY_LICENSES.html
+
+      - name: Archive
+        shell: pwsh
+        run: |
+          $name = "lazymsbuild-${{ github.ref_name }}-${{ matrix.target }}"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item "target\${{ matrix.target }}\release\lazymsbuild.exe" $name
+          Copy-Item logger\bin\Release\net472\LazyMsBuild.Logger.dll $name
+          Copy-Item README.md, README.ja.md, CHANGELOG.md, LICENSE-MIT, LICENSE-APACHE, THIRD_PARTY.md, THIRD_PARTY_LICENSES.html $name
+          Copy-Item scripts\install-extractor.ps1 $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+
+      - name: Smoke test
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $exe = "lazymsbuild-${{ github.ref_name }}-${{ matrix.target }}\lazymsbuild.exe"
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw "lazymsbuild --version failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            lazymsbuild-*.zip
+            lazymsbuild-*.zip.sha256
+
+  release:
+    needs: archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" 'index($0, "## [" v "]") == 1 {found=1; next} /^## \[/ {if (found) exit} found' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "no section for $version in CHANGELOG.md"; exit 1; }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat dist/*.sha256 > dist/SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

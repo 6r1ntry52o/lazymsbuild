@@ -72,10 +72,13 @@ async fn event_loop(
     Ok(())
 }
 
-/// Opens a location: `ui.edit_at_line`, else `$EDITOR`, else `$VISUAL` (the terminal is handed
-/// over while it runs), else the default application.
+/// Opens a location: `%LAZYMSBUILD_EDITOR%` (an editor integration sets it for the terminal it
+/// starts lazymsbuild in), else `ui.edit_at_line`, else `$EDITOR`, else `$VISUAL` (the terminal is
+/// handed over while it runs), else the default application.
 fn open_editor(terminal: &mut DefaultTerminal, app: &mut App, request: &EditorRequest) -> Result<()> {
-    match editor_command(app.ws.config.ui.edit_at_line.as_deref(), request) {
+    let from_env = std::env::var("LAZYMSBUILD_EDITOR").ok().filter(|t| !t.trim().is_empty());
+    let template = from_env.as_deref().or(app.ws.config.ui.edit_at_line.as_deref());
+    match editor_command(template, request) {
         Some(mut command) => {
             ratatui::restore();
             let status = command.status();

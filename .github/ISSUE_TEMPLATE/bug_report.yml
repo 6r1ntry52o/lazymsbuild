@@ -1,0 +1,47 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste anything from a private codebase**: no build logs, solution or project files,
+        project names, paths or `compile_commands.json` from your company's code. A small synthetic
+        solution that shows the problem, and `lazymsbuild doctor --report` (it masks paths and leaves
+        out project names), are the best report.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps, ideally on a minimal synthetic solution (attach it as a zip).
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: lazymsbuild doctor --report
+      description: The output of `lazymsbuild doctor --report`.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: lazymsbuild version
+      description: "`lazymsbuild --version`"
+    validations:
+      required: true
+  - type: checkboxes
+    id: private
+    attributes:
+      label: Private code
+      options:
+        - label: This report contains nothing from a private codebase.
+          required: true
