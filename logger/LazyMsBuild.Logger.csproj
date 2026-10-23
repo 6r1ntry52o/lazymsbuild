@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The MSBuild logger that lazymsbuild passes to MSBuild.exe with -logger:.
+       MSBuild.exe from Visual Studio 2019 and later runs on .NET Framework 4.7.2+, so this targets net472.
+       Microsoft.Build.Framework comes from the MSBuild that loads the logger: reference only, never copied. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>LazyMsBuild.Logger</AssemblyName>
+    <RootNamespace>LazyMsBuild.Logger</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Version>0.1.0</Version>
+    <Product>lazymsbuild</Product>
+    <Description>MSBuild logger that records compiler command lines for lazymsbuild.</Description>
+    <Copyright>lazymsbuild contributors</Copyright>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Build.Framework" Version="16.11.0" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

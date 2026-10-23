@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  check:
+    name: fmt, clippy, tests
+    # Visual Studio 2022 with the C++ workload, the Windows SDK and the .NET SDK, which the
+    # integration tests need to build the fixture solutions with MSBuild.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Build the logger
+        run: dotnet build logger -c Release
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Tests
+        # Without MSBuild the integration tests skip themselves; here they must run.
+        env:
+          LAZYMSBUILD_REQUIRE_MSBUILD: "1"
+        run: cargo test --all --locked
+
+  msrv:
+    name: minimum Rust version
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.89
+        run: |
+          rustup toolchain install 1.89 --profile minimal --no-self-update
+          rustup default 1.89
+      - run: cargo check --all --locked

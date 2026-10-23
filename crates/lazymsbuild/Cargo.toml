@@ -1,0 +1,48 @@
+[package]
+name = "lazymsbuild"
+description = "A lazygit-style terminal UI for MSBuild that keeps compile_commands.json complete for clangd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[[bin]]
+name = "lazymsbuild"
+path = "src/main.rs"
+
+[dependencies]
+lazymsbuild-core.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+futures.workspace = true
+ratatui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+unicode-width.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+
+# cargo-binstall: the archive the release workflow publishes for each version.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/lazymsbuild-v{ version }-{ target }.zip"
+bin-dir = "lazymsbuild-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "zip"

@@ -1,0 +1,16 @@
+/target/
+/logger/bin/
+/logger/obj/
+
+# Visual Studio, when the fixtures are opened in it
+.vs/
+*.user
+
+# Build output, in case a fixture is built where it is (the tests copy them first)
+/tests/fixtures/**/x64/
+/tests/fixtures/**/Win32/
+/tests/fixtures/**/Debug/
+/tests/fixtures/**/Release/
+/tests/fixtures/**/compile_commands.json
+/tests/fixtures/**/.clangd
+/tests/fixtures/**/*.metaproj*

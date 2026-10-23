@@ -1,0 +1,17 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Libs/">
+    <Project Path="src/Core/MyApp.Core.vcxproj" Id="a1b2c3d4-0002-4000-8000-000000000002" />
+  </Folder>
+  <Folder Name="/Libs/Native.Ext/">
+    <Project Path="src/Util/Util (Legacy).vcxproj" Id="a1b2c3d4-0003-4000-8000-000000000003">
+      <Build Solution="Release|x64" Project="false" />
+    </Project>
+  </Folder>
+  <Project Path="src/App/App.vcxproj" Id="a1b2c3d4-0001-4000-8000-000000000001" />
+</Solution>

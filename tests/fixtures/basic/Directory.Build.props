@@ -1,0 +1,7 @@
+<Project>
+  <!-- Keeps MSBuild from picking up a Directory.Build.props above this fixture, and gives
+       the freshness check (lazymsbuild check) an auto-imported file to watch. -->
+  <PropertyGroup>
+    <FixtureRoot>$(MSBuildThisFileDirectory)</FixtureRoot>
+  </PropertyGroup>
+</Project>
