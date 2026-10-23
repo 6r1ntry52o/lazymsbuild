@@ -8,6 +8,9 @@
     configuration with the plugin file taken from docs/editors/lazyvim.md, prepares a copy of the
     fixture solution, and runs tests\editors\lazyvim_check.lua in a headless Neovim.
 
+    With -Installed, the configuration already has lua/plugins/lazymsbuild.lua (dotfiles-windows
+    does): it must be the documentation's, and the configuration is checked as it is.
+
     Needs: Neovim with LazyVim and its clangd extra installed, MSBuild, and lazymsbuild built
     (cargo build). The design-time extractor is optional.
 
@@ -19,6 +22,7 @@ param(
     [string]$NvimConfig = (Join-Path $env:LOCALAPPDATA 'nvim'),
     [string]$NvimData = (Join-Path $env:LOCALAPPDATA 'nvim-data'),
     [string]$Lazymsbuild = '',
+    [switch]$Installed,
     [switch]$Keep
 )
 
@@ -41,15 +45,23 @@ try {
         if (Test-Path $source) { Copy-Tree $source (Join-Path $sandbox "data\nvim-data\$dir") }
     }
     $plugins = Join-Path $sandbox 'config\nvim\lua\plugins'
-    # A :CompileCommands of the configuration itself (dotfiles-windows has one) would hide ours.
-    Get-ChildItem $plugins -Filter *.lua | Where-Object { (Get-Content $_.FullName -Raw) -match 'CompileCommands' } |
-        ForEach-Object { Set-Content $_.FullName 'return {}' -Encoding utf8 }
-
-    # The plugin file, exactly as the documentation has it.
     $doc = Get-Content (Join-Path $repoRoot 'docs\editors\lazyvim.md') -Raw
     $match = [regex]::Match($doc, '(?s)```lua\r?\n(.*?)```')
     if (-not $match.Success) { throw 'no lua block in docs/editors/lazyvim.md' }
-    [IO.File]::WriteAllText((Join-Path $plugins 'lazymsbuild.lua'), $match.Groups[1].Value, (New-Object Text.UTF8Encoding($false)))
+    $block = $match.Groups[1].Value.Replace("`r`n", "`n")
+    $own = Join-Path $plugins 'lazymsbuild.lua'
+    if ($Installed) {
+        if (-not (Test-Path $own)) { throw "-Installed: $NvimConfig has no lua\plugins\lazymsbuild.lua" }
+        if ([IO.File]::ReadAllText($own).Replace("`r`n", "`n") -ne $block) {
+            throw "-Installed: lua\plugins\lazymsbuild.lua differs from docs/editors/lazyvim.md"
+        }
+    } else {
+        # A :CompileCommands of the configuration itself (dotfiles-windows has one) would hide ours.
+        Get-ChildItem $plugins -Filter *.lua | Where-Object { (Get-Content $_.FullName -Raw) -match 'CompileCommands' } |
+            ForEach-Object { Set-Content $_.FullName 'return {}' -Encoding utf8 }
+        # The plugin file, exactly as the documentation has it.
+        [IO.File]::WriteAllText($own, $block, (New-Object Text.UTF8Encoding($false)))
+    }
 
     # The fixture, filled once with a rebuild.
     $repo = Join-Path $sandbox 'repo'

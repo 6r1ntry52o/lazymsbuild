@@ -201,7 +201,10 @@ return {
   {
     "folke/snacks.nvim",
     init = function()
-      vim.api.nvim_create_user_command("CompileCommands", M.sync, { desc = "lazymsbuild sync (compile_commands.json)" })
+      -- Without lazymsbuild, leave :CompileCommands to any older setup that defines it.
+      if vim.fn.executable("lazymsbuild") == 1 then
+        vim.api.nvim_create_user_command("CompileCommands", M.sync, { desc = "lazymsbuild sync (compile_commands.json)" })
+      end
       vim.api.nvim_create_autocmd("FileType", {
         group = vim.api.nvim_create_augroup("lazymsbuild", { clear = true }),
         pattern = { "c", "cpp" },
@@ -256,8 +259,12 @@ block `lazymsbuild init --mode external` prints to `%LOCALAPPDATA%\clangd\config
 
 ## Notes
 
-- `lazymsbuild` must be on `PATH`.
-- A repository with several solutions: run `lazymsbuild --solution <file>` once (or the TUI and
-  pick one); `lazymsbuild path` then finds the one used last.
+- `lazymsbuild` must be on `PATH` when Neovim starts; without it the plugin stays out of the way
+  (no `:CompileCommands`, no notifications).
+- A repository with several solutions: run a command with `--solution <file>` once (for example
+  `lazymsbuild --solution <file> init`); the plugin's calls then use that solution.
+- Coming from a setup that wrote `build/compile_commands.json` (CMake habits, an older
+  `:CompileCommands`): delete that file, or clangd may keep reading it; `lazymsbuild check` lists
+  such files under "other databases".
 - Without Snacks (an older LazyVim), replace `M.toggle` with any terminal plugin running
   `lazymsbuild` in the project directory.

@@ -57,7 +57,8 @@ jobs:
           Copy-Item scripts\install-extractor.ps1 $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
           $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+          # LF, so that `sha256sum -c SHA256SUMS` works too
+          [IO.File]::WriteAllText((Join-Path $PWD "$name.zip.sha256"), "$hash  $name.zip`n")
 
       - name: Smoke test
         if: matrix.target == 'x86_64-pc-windows-msvc'
