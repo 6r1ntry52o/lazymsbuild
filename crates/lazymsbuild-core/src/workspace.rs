@@ -35,6 +35,10 @@ pub struct OpenOptions {
     pub start: PathBuf,
     /// An explicit solution (`--solution`).
     pub solution: Option<PathBuf>,
+    /// The state root, instead of `%LOCALAPPDATA%\lazymsbuild` (tests).
+    pub state_root: Option<PathBuf>,
+    /// The user configuration directory, instead of searching for it (tests).
+    pub user_config_dir: Option<PathBuf>,
 }
 
 /// The local state file (`state.json`).
@@ -50,6 +54,8 @@ pub struct LocalState {
     pub solutions: BTreeMap<String, SolutionState>,
     /// Per output file (by key): what lazymsbuild wrote there last.
     pub outputs: BTreeMap<String, OutputRecord>,
+    /// The TUI offered `init` for this repository once (it does not ask again).
+    pub init_offered: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -73,6 +79,7 @@ pub struct OutputRecord {
 
 pub const LOCAL_STATE_VERSION: u32 = 1;
 
+#[derive(Clone)]
 pub struct Workspace {
     pub solution: Solution,
     /// The repository root, or the solution's directory outside Git.
@@ -92,8 +99,12 @@ impl Workspace {
         let start_root = git::find_root(&start);
 
         // Settings first: .lazymsbuild.toml can name the solution.
-        let early = config::load(start_root.as_deref())?;
-        let state_root = config::state_root()?;
+        let user_dir = options.user_config_dir.as_deref();
+        let early = config::load(user_dir, start_root.as_deref())?;
+        let state_root = match &options.state_root {
+            Some(root) => root.clone(),
+            None => config::state_root()?,
+        };
         let solution_path = match &options.solution {
             Some(path) => paths::absolutize(&start, path),
             None => match early.config.solution.as_deref().zip(start_root.as_deref()) {
@@ -127,7 +138,7 @@ impl Workspace {
         let loaded = if start_root.as_deref().is_some_and(|r| paths::same(r, &root)) {
             early
         } else {
-            config::load(Some(&root))?
+            config::load(user_dir, Some(&root))?
         };
 
         let state_dir = state_dir_for(&state_root, &root);
@@ -265,6 +276,11 @@ impl Workspace {
     pub fn record_output(&mut self, record: OutputRecord) -> Result<()> {
         self.local.outputs.insert(paths::key(&record.path), record);
         self.save_local_state()
+    }
+
+    /// Reads `state.json` again, after another process (or a build task) changed it.
+    pub fn reload_local_state(&mut self) {
+        self.local = read_local_state(&self.state_dir);
     }
 
     pub fn save_local_state(&mut self) -> Result<()> {

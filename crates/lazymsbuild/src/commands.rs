@@ -28,7 +28,7 @@ pub fn open_workspace(global: &Global) -> Result<Workspace> {
         Some(dir) => dir.clone(),
         None => std::env::current_dir().context("cannot read the current directory")?,
     };
-    let workspace = Workspace::open(&OpenOptions { start, solution: global.solution.clone() })?;
+    let workspace = Workspace::open(&OpenOptions { start, solution: global.solution.clone(), ..Default::default() })?;
     for warning in &workspace.warnings {
         eprintln!("{} {warning}", style::yellow("warning:"));
     }

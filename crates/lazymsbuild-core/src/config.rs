@@ -33,8 +33,18 @@ pub struct Config {
     pub init: InitConfig,
     pub clangd: ClangdConfig,
     pub logs: LogsConfig,
+    pub ui: UiConfig,
     /// Key bindings of the terminal UI: action name -> key or list of keys.
     pub keys: BTreeMap<String, Keys>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiConfig {
+    /// The command `e` runs to open an error's location, with `{file}`, `{line}` and `{column}`
+    /// (e.g. `"code -g {file}:{line}:{column}"`). Empty: `$EDITOR`, then `$VISUAL`, then the
+    /// default application.
+    pub edit_at_line: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -200,12 +210,13 @@ pub fn user_config_dir() -> Option<PathBuf> {
     candidates.iter().find(|d| d.join(USER_FILE).is_file()).cloned().or_else(|| candidates.into_iter().next())
 }
 
-/// Loads the user configuration and, when `repo_root` is given, the repository's.
-pub fn load(repo_root: Option<&Path>) -> Result<Loaded> {
+/// Loads the user configuration (from `user_dir`, or the directory [`user_config_dir`] finds) and,
+/// when `repo_root` is given, the repository's.
+pub fn load(user_dir: Option<&Path>, repo_root: Option<&Path>) -> Result<Loaded> {
     let mut loaded = Loaded::default();
     let mut merged = toml::Table::new();
     let mut files = Vec::new();
-    if let Some(dir) = user_config_dir() {
+    if let Some(dir) = user_dir.map(Path::to_path_buf).or_else(user_config_dir) {
         files.push(dir.join(USER_FILE));
     }
     if let Some(root) = repo_root {
