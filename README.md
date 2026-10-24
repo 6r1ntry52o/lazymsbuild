@@ -14,13 +14,13 @@ understands a Visual Studio C++ solution: its include paths, its defines, all of
 │  ├─ Tools/                       ││ib                                                        │
 │  │   └─ Updater                  ││  updater.c                                               │
 │  └─ ControlApp                   ││  Updater.vcxproj -> C:\src\demo\x64\Debug\Updater.exe    │
-╰ target: [Solution] Demo.sln ─────╯│  pch.cpp                                                 │
-╭[2] Configuration / Platform──────╮│  main.cpp                                                │
-│* Debug   | x64                   ││  window.cpp                                              │
-│  Debug   | x86                   ││  ControlApp.vcxproj -> C:\src\demo\x64\Debug\ControlApp.e│
-│  Release | x64                   ││xe                                                        │
-│  Release | x86                   ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
-╰──────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+│                                  ││  pch.cpp                                                 │
+╰ target: [Solution] Demo.sln ─────╯│  main.cpp                                                │
+╭[2] Configuration / Platform──────╮│  window.cpp                                              │
+│          Win32  x64  ARM64       ││  ControlApp.vcxproj -> C:\src\demo\x64\Debug\ControlApp.e│
+│ Debug      ·     ●     ·         ││xe                                                        │
+│ Release    ·     ◆               ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
+╰ ● active  ◆ database ────────────╯╰──────────────────────────────────────────────────────────╯
 ╭[3] Actions & Options─────────────╮╭[5] clangd DB Status──────────────────────────────────────╮
 │ b Build                          ││Profile  : Debug|x64            Mode     : repo-root      │
 │ r Rebuild                        ││Entries  : 6 (+6)               Coverage : 6/6            │
@@ -95,7 +95,7 @@ lazygit; every one can be changed in `[keys]` of the configuration.
 |---|---|
 | `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | Switch panes |
 | `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | Move, scroll |
-| `[`, `]` | Switch tabs in a pane (Log / Errors) |
+| `[`, `]` | Switch tabs in a pane (Log / Errors); the platform in the configuration table |
 | `Enter`, `Space` | Select the target or the configuration |
 | `/` | Filter the list |
 | `?` | Show all keys |

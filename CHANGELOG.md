@@ -42,7 +42,8 @@ events) carry a `format_version` and follow the same rules.
   file); `--report` masks paths and leaves out project, file and
   configuration names, for bug reports.
 - `--solution` is remembered: later commands and editors use the same solution.
-- The TUI: targets as a tree of solution folders, configurations, actions, log and errors, and
+- The TUI: targets as a tree of solution folders, configurations as a table of configuration and
+  platform (without those no C++ project builds in), actions, log and errors, and
   the database status; lazygit keys, all configurable in `[keys]`; filter, menu and help;
   builds run in the background and can be cancelled; `e` opens an error in the editor at its
   line (`ui.edit_at_line`, `LAZYMSBUILD_EDITOR`); one pane at a time below 70 columns.

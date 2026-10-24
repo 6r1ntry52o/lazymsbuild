@@ -12,13 +12,13 @@
 │  ├─ Tools/                       ││ib                                                        │
 │  │   └─ Updater                  ││  updater.c                                               │
 │  └─ ControlApp                   ││  Updater.vcxproj -> C:\src\demo\x64\Debug\Updater.exe    │
-╰ target: [Solution] Demo.sln ─────╯│  pch.cpp                                                 │
-╭[2] Configuration / Platform──────╮│  main.cpp                                                │
-│* Debug   | x64                   ││  window.cpp                                              │
-│  Debug   | x86                   ││  ControlApp.vcxproj -> C:\src\demo\x64\Debug\ControlApp.e│
-│  Release | x64                   ││xe                                                        │
-│  Release | x86                   ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
-╰──────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+│                                  ││  pch.cpp                                                 │
+╰ target: [Solution] Demo.sln ─────╯│  main.cpp                                                │
+╭[2] Configuration / Platform──────╮│  window.cpp                                              │
+│          Win32  x64  ARM64       ││  ControlApp.vcxproj -> C:\src\demo\x64\Debug\ControlApp.e│
+│ Debug      ·     ●     ·         ││xe                                                        │
+│ Release    ·     ◆               ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
+╰ ● active  ◆ database ────────────╯╰──────────────────────────────────────────────────────────╯
 ╭[3] Actions & Options─────────────╮╭[5] clangd DB Status──────────────────────────────────────╮
 │ b Build                          ││Profile  : Debug|x64            Mode     : repo-root      │
 │ r Rebuild                        ││Entries  : 6 (+6)               Coverage : 6/6            │
@@ -70,7 +70,7 @@ b build · r rebuild · c clean · s sync · x menu · ? help · q quit
 |---|---|
 | `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | ペインの切り替え |
 | `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | 移動、スクロール |
-| `[`, `]` | ペイン内のタブの切り替え（Log / Errors） |
+| `[`, `]` | ペイン内のタブの切り替え（Log / Errors）。構成の表では Platform の切り替え |
 | `Enter`, `Space` | ターゲットや構成を選ぶ |
 | `/` | 一覧の絞り込み |
 | `?` | すべてのキーを表示 |

@@ -147,8 +147,10 @@ fn draws_the_five_panes() {
         "Native.Ext/",
         "Util (Legacy)",
         "App",
-        "* Debug   | x64",
-        "  Release | x86",
+        "x64  x86",
+        " Debug     ●    ·",
+        " Release   ·    ·",
+        "● active  ◆ database",
         "Parallel (-m) : ON",
         "No database for Debug|x64 yet.",
         "b build · r rebuild · c clean · s sync · x menu · ? help · q quit",
@@ -203,14 +205,18 @@ fn panes_cursors_and_target_selection() {
 #[test]
 fn switching_the_configuration() {
     let mut h = harness();
-    h.keys("2j");
+    // Down a row is Release; ] moves across to x86; [ back; Enter on Debug|x86.
+    h.keys("2j]][k");
+    assert_eq!(h.app.config_cursor, (0, 0), "[ and ] move across and stop at the ends");
+    h.keys("]");
+    assert_eq!(h.app.focus, Pane::Configs, "[ and ] stay in the pane");
     h.key(KeyCode::Enter);
     h.wait_for(Duration::from_secs(30), |app| app.active == Profile::new("Debug", "x86"));
     // No database yet: the app offers a sync (or explains when there is no extractor).
     assert!(matches!(h.app.popup, Some(Popup::Confirm { .. }) | Some(Popup::Message { .. })));
     h.key(KeyCode::Esc);
     let screen = h.screen(120, 36);
-    assert!(contains(&screen, "* Debug   | x86"), "{}", screen.join("\n"));
+    assert!(contains(&screen, " Debug     ·    ●"), "{}", screen.join("\n"));
     assert_eq!(h.app.ws.active_profile().unwrap(), Profile::new("Debug", "x86"), "remembered in state.json");
 }
 
@@ -338,4 +344,16 @@ fn building_from_the_tui_updates_the_status_pane() {
     assert!(dump.contains("Rebuild succeeded"), "{dump}");
     assert_eq!(h.app.tab, LogTab::Log);
     assert!(h.repo.join("compile_commands.json").is_file());
+}
+
+#[test]
+fn the_configuration_table_keeps_the_solution_order() {
+    let profiles: Vec<Profile> =
+        ["Debug|ARM64", "Debug|x64", "Release|x64", "Profile|x64"].iter().map(|p| Profile::parse(p).unwrap()).collect();
+    let grid = super::app::ConfigGrid::new(&profiles);
+    assert_eq!(grid.configurations, ["Debug", "Release", "Profile"]);
+    assert_eq!(grid.platforms, ["ARM64", "x64"]);
+    assert_eq!(grid.profile((2, 1)), Profile::new("Profile", "x64"));
+    assert_eq!(grid.position(&Profile::new("Release", "x64")), Some((1, 1)));
+    assert_eq!(grid.position(&Profile::new("Release", "Win32")), None);
 }

@@ -34,6 +34,42 @@ pub enum Pane {
     Db,
 }
 
+/// The configurations as a table: configurations down, platforms across, each in the order the
+/// solution first names it. A cell the solution does not have stays empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ConfigGrid {
+    pub configurations: Vec<String>,
+    pub platforms: Vec<String>,
+}
+
+impl ConfigGrid {
+    pub fn new(profiles: &[Profile]) -> ConfigGrid {
+        let mut grid = ConfigGrid::default();
+        for profile in profiles {
+            if !grid.configurations.contains(&profile.configuration) {
+                grid.configurations.push(profile.configuration.clone());
+            }
+            if !grid.platforms.contains(&profile.platform) {
+                grid.platforms.push(profile.platform.clone());
+            }
+        }
+        grid
+    }
+
+    pub fn profile(&self, (row, column): (usize, usize)) -> Profile {
+        Profile::new(
+            self.configurations.get(row).cloned().unwrap_or_default(),
+            self.platforms.get(column).cloned().unwrap_or_default(),
+        )
+    }
+
+    pub fn position(&self, profile: &Profile) -> Option<(usize, usize)> {
+        let row = self.configurations.iter().position(|c| *c == profile.configuration)?;
+        let column = self.platforms.iter().position(|p| *p == profile.platform)?;
+        Some((row, column))
+    }
+}
+
 impl Pane {
     const ORDER: [Pane; 5] = [Pane::Targets, Pane::Configs, Pane::Actions, Pane::Log, Pane::Db];
 
@@ -208,8 +244,13 @@ pub struct App {
     pub target: Option<usize>,
     pub filter: String,
     pub filtering: bool,
+    /// The configurations at least one C++ project builds in.
     pub profiles: Vec<Profile>,
-    pub config_cursor: usize,
+    pub grid: ConfigGrid,
+    /// Row (configuration) and column (platform) in [`App::grid`].
+    pub config_cursor: (usize, usize),
+    /// The configurations that have a database.
+    pub with_db: Vec<Profile>,
     pub active: Profile,
     pub parallel: bool,
     pub action_cursor: usize,
@@ -240,9 +281,23 @@ pub struct App {
 impl App {
     pub fn new(ws: Workspace, events: mpsc::UnboundedSender<Event>, done: mpsc::UnboundedSender<Done>) -> Result<App> {
         let (keymap, key_warnings) = Keymap::new(&ws.config.keys);
-        let profiles = ws.solution.profiles.clone();
         let active = ws.active_profile()?;
-        let config_cursor = profiles.iter().position(|p| *p == active).unwrap_or(0);
+        // Any CPU and the like, where only .NET projects build, mean nothing here.
+        let mut profiles: Vec<Profile> = ws
+            .solution
+            .profiles
+            .iter()
+            .filter(|p| ws.solution.cpp_projects().any(|project| project.builds_in(p)))
+            .cloned()
+            .collect();
+        if profiles.is_empty() {
+            profiles = ws.solution.profiles.clone();
+        }
+        if !profiles.contains(&active) {
+            profiles.push(active.clone());
+        }
+        let grid = ConfigGrid::new(&profiles);
+        let config_cursor = grid.position(&active).unwrap_or((0, 0));
         let rows = tree::rows(&ws.solution, None);
         let parallel = ws.config.build.parallel;
         let mut app = App {
@@ -254,7 +309,9 @@ impl App {
             filter: String::new(),
             filtering: false,
             profiles,
+            grid,
             config_cursor,
+            with_db: Vec::new(),
             active,
             parallel,
             action_cursor: 0,
@@ -279,6 +336,7 @@ impl App {
             done,
             ws,
         };
+        app.refresh_databases();
         let cpp = app.ws.solution.cpp_projects().count();
         app.note(format!(
             "lazymsbuild {} · {} ({cpp} C++ projects)",
@@ -350,7 +408,13 @@ impl App {
         }
     }
 
+    /// Which configurations have a database, for the configuration table.
+    fn refresh_databases(&mut self) {
+        self.with_db = self.profiles.iter().filter(|p| self.ws.profile_db_path(p).is_file()).cloned().collect();
+    }
+
     pub fn on_done(&mut self, done: Done) {
+        self.refresh_databases();
         match done {
             Done::Operation { kind, result, local, elapsed } => {
                 self.running = None;
@@ -606,8 +670,11 @@ impl App {
         });
     }
 
-    fn switch_profile(&mut self, index: usize) {
-        let Some(profile) = self.profiles.get(index).cloned() else { return };
+    fn switch_profile(&mut self, profile: Profile) {
+        if !self.profiles.contains(&profile) {
+            self.notify(format!("{profile} is not in the solution"), true);
+            return;
+        }
         if profile == self.active || self.busy() {
             return;
         }
@@ -790,6 +857,12 @@ impl App {
             Action::PageDown => self.move_cursor(self.page.max(2) as isize / 2),
             Action::Top => self.move_cursor(isize::MIN / 2),
             Action::Bottom => self.move_cursor(isize::MAX / 2),
+            // In the configuration table the "tabs" are the platforms.
+            Action::PrevTab | Action::NextTab if self.focus == Pane::Configs => {
+                let delta: isize = if action == Action::PrevTab { -1 } else { 1 };
+                let last = self.grid.platforms.len().saturating_sub(1) as isize;
+                self.config_cursor.1 = (self.config_cursor.1 as isize + delta).clamp(0, last) as usize;
+            }
             Action::PrevTab | Action::NextTab => {
                 self.tab = if self.tab == LogTab::Log { LogTab::Errors } else { LogTab::Log };
                 self.focus = Pane::Log;
@@ -851,7 +924,7 @@ impl App {
         };
         match self.focus {
             Pane::Targets => self.tree_cursor = clamp(self.tree_cursor, self.rows.len()),
-            Pane::Configs => self.config_cursor = clamp(self.config_cursor, self.profiles.len()),
+            Pane::Configs => self.config_cursor.0 = clamp(self.config_cursor.0, self.grid.configurations.len()),
             Pane::Actions => self.action_cursor = clamp(self.action_cursor, ACTIONS.len()),
             Pane::Log => match self.tab {
                 // Scrolling counts screen rows up from the end: "up" scrolls back. Drawing stops
@@ -870,7 +943,7 @@ impl App {
                 Some(RowKind::Project(index)) => self.target = Some(index),
                 _ => {}
             },
-            Pane::Configs => self.switch_profile(self.config_cursor),
+            Pane::Configs => self.switch_profile(self.grid.profile(self.config_cursor)),
             Pane::Actions => self.act(ACTIONS[self.action_cursor]),
             Pane::Log if self.tab == LogTab::Errors => self.edit_selected(),
             Pane::Log => {}

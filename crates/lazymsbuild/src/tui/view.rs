@@ -68,7 +68,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         draw_pane(frame, app, &theme, pane, main);
     } else {
         let [left, right] = Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)]).areas(main);
-        let configs_height = (app.profiles.len() as u16 + 2).clamp(3, 9);
+        let configs_height = (app.grid.configurations.len() as u16 + 3).clamp(4, 10);
         let [targets, configs, actions] = Layout::vertical([
             Constraint::Min(4),
             Constraint::Length(configs_height),
@@ -158,22 +158,48 @@ fn draw_targets(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused
     frame.render_stateful_widget(list, area, &mut state);
 }
 
+/// Configurations down, platforms across: ● the active one, ◆ one with a database, · one that
+/// can be chosen, nothing where the solution has no such pair.
 fn draw_configs(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bool) {
-    let width = app.profiles.iter().map(|p| p.configuration.chars().count()).max().unwrap_or(0);
-    let items: Vec<ListItem> = app
-        .profiles
-        .iter()
-        .map(|p| {
-            let active = *p == app.active;
-            let text = format!("{} {:width$} | {}", if active { "*" } else { " " }, p.configuration, p.platform);
-            ListItem::new(Line::styled(text, if active { theme.selected() } else { Style::new() }))
-        })
-        .collect();
-    let list = List::new(items)
-        .block(pane_block(Line::raw("[2] Configuration / Platform"), focused, theme))
-        .highlight_style(theme.cursor(focused));
-    let mut state = ListState::default().with_selected(Some(app.config_cursor));
-    frame.render_stateful_widget(list, area, &mut state);
+    let grid = &app.grid;
+    let label = grid.configurations.iter().map(|c| c.chars().count()).max().unwrap_or(0);
+    let widths: Vec<usize> = grid.platforms.iter().map(|p| p.chars().count().max(3)).collect();
+    let (cursor_row, cursor_column) = app.config_cursor;
+
+    let mut header = vec![Span::raw(format!(" {:label$}", ""))];
+    for (column, (platform, width)) in grid.platforms.iter().zip(&widths).enumerate() {
+        let style = if focused && column == cursor_column { Style::new() } else { theme.dim() };
+        header.push(Span::styled(format!("  {platform:^width$}"), style));
+    }
+    let mut lines = vec![Line::from(header)];
+    // Keep the cursor's row in view when there are more configurations than rows.
+    let rows = (area.height as usize).saturating_sub(3).max(1);
+    let first = cursor_row.saturating_sub(rows - 1);
+    for (row, configuration) in grid.configurations.iter().enumerate().skip(first).take(rows) {
+        let style = if focused && row == cursor_row { Style::new() } else { theme.dim() };
+        let mut spans = vec![Span::styled(format!(" {configuration:label$}"), style)];
+        for (column, width) in widths.iter().enumerate() {
+            let profile = grid.profile((row, column));
+            let (mark, mut style) = if profile == app.active {
+                ("●", theme.selected())
+            } else if app.with_db.contains(&profile) {
+                ("◆", Style::new())
+            } else if app.profiles.contains(&profile) {
+                ("·", theme.dim())
+            } else {
+                (" ", Style::new())
+            };
+            if focused && (row, column) == app.config_cursor {
+                style = theme.cursor(true);
+            }
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled(format!("{mark:^width$}"), style));
+        }
+        lines.push(Line::from(spans));
+    }
+    let block = pane_block(Line::raw("[2] Configuration / Platform"), focused, theme)
+        .title_bottom(Line::styled(" ● active  ◆ database ", theme.dim()));
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 fn draw_actions(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bool) {
