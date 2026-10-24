@@ -323,9 +323,15 @@ fn building_from_the_tui_updates_the_status_pane() {
     assert!(h.app.notice.as_ref().is_some_and(|n| n.text.contains("is running")));
     h.wait_for(Duration::from_secs(300), |app| app.running.is_none());
     let check = h.app.check.clone().unwrap();
-    assert_eq!((check.coverage.covered, check.coverage.total), (7, 7));
     let screen = h.screen(120, 36);
     let dump = screen.join("\n");
+    let log = std::fs::read_dir(h.app.ws.state_dir.join("logs"))
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| std::fs::read_to_string(entry.ok()?.path()).ok())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!((check.coverage.covered, check.coverage.total), (7, 7), "{dump}\n{log}");
     assert!(dump.contains("Entries  : 7 (+7)"), "{dump}");
     assert!(dump.contains("Coverage : 7/7"), "{dump}");
     assert!(dump.contains("✔ published"), "{dump}");

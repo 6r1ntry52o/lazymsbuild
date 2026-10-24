@@ -43,7 +43,7 @@ jobs:
         # Without MSBuild the integration tests skip themselves; here they must run.
         env:
           LAZYMSBUILD_REQUIRE_MSBUILD: "1"
-        run: cargo test --all --locked
+        run: cargo test --all --locked --no-fail-fast
 
   msrv:
     name: minimum Rust version
