@@ -12,7 +12,7 @@
 //!
 //! A Clean changes nothing. Every write is atomic.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -210,14 +210,17 @@ impl ProfileDb {
             meta.method = Some(extraction.method);
         }
 
-        // Sources a project no longer lists. Only for projects whose whole list could be read.
+        // Sources a project no longer lists. Only for projects whose whole list could be read, and
+        // never what this extraction compiled: a target can add ClCompile items while it runs
+        // (Notepad++ adds uchardet that way), which no reading of the project file sees.
+        let compiled_now: HashSet<String> = extraction.entries.iter().map(|c| c.entry.key()).collect();
         let mut drop_keys = Vec::new();
         for project in &involved {
             let project_key = paths::key(project);
             let Some(file) = projects.get(&project_key).filter(|f| f.unresolved.is_empty()) else { continue };
             for (key, meta) in &self.meta.entries {
                 let belongs = meta.project.as_deref().is_some_and(|p| paths::key(Path::new(p)) == project_key);
-                if belongs && !file.lists(key) {
+                if belongs && !file.lists(key) && !compiled_now.contains(key) {
                     drop_keys.push(key.clone());
                 }
             }
@@ -449,6 +452,24 @@ mod tests {
         let keys: Vec<&String> = f.db.entries.keys().collect();
         assert_eq!(keys, [&paths::key(&f.root.join("c.cpp"))]);
         assert_eq!(r.removed, 2);
+    }
+
+    #[test]
+    fn gc_keeps_what_the_build_compiled() {
+        // A target adds b.cpp at build time; the project file does not list it.
+        let mut f = fixture(&["a.cpp", "b.cpp"]);
+        std::fs::write(&f.project, r#"<Project><ItemGroup><ClCompile Include="a.cpp" /></ItemGroup></Project>"#)
+            .unwrap();
+        f.projects.insert(paths::key(&f.project), ProjectFile::load(&f.project, None, None).unwrap());
+        let mut build = Extraction::new(Method::Build);
+        build.entries = vec![
+            captured(&f.root.join("a.cpp"), "/D1", &f.project),
+            captured(&f.root.join("b.cpp"), "/D1", &f.project),
+        ];
+        build.current_projects = vec![f.project.clone()];
+        build.complete_projects = vec![f.project.clone()];
+        let r = f.db.apply(&build, &f.projects, true, "t0");
+        assert_eq!((r.after, r.removed), (2, 0));
     }
 
     #[test]

@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use regex::Regex;
@@ -176,29 +177,89 @@ pub struct CheckResult {
     pub diagnostics: Vec<String>,
     /// The compile command clangd used came from the database (not a fallback).
     pub from_database: bool,
+    /// clangd did not end within [`CHECK_TIMEOUT`].
+    pub timed_out: bool,
 }
 
 static ALL_CHECKS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"All checks completed, (\d+) errors?").unwrap());
 static DIAGNOSTIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\] (\[[^\]]+\] )?Line \d+:.*$").unwrap());
 
+/// How long `clangd --check` may take on one file.
+pub const CHECK_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// Runs `clangd --check` on one file, with `--compile-commands-dir` in external mode.
+///
+/// `--check-locations=false`: by default clangd also tries every refactoring at every token,
+/// which takes minutes on a large file (imgui.cpp with clangd 23: several minutes; 1.3 s without). A clangd
+/// that does not know the option is asked again without it.
 pub fn check_file(exe: &Path, file: &Path, compile_commands_dir: Option<&Path>) -> Result<CheckResult> {
-    let mut cmd = command(exe);
-    cmd.arg(format!("--check={}", file.display()));
-    if let Some(dir) = compile_commands_dir {
-        cmd.arg(format!("--compile-commands-dir={}", dir.display()));
+    let run = |locations: bool| -> Result<Option<String>> {
+        let mut cmd = command(exe);
+        cmd.arg(format!("--check={}", file.display()));
+        if !locations {
+            cmd.arg("--check-locations=false");
+        }
+        if let Some(dir) = compile_commands_dir {
+            cmd.arg(format!("--compile-commands-dir={}", dir.display()));
+        }
+        cmd.current_dir(file.parent().unwrap_or(Path::new(".")));
+        let output = output_within(cmd, CHECK_TIMEOUT).with_context(|| format!("cannot run {}", exe.display()))?;
+        // clangd logs to stderr.
+        Ok(output.map(|o| format!("{}{}", String::from_utf8_lossy(&o.stderr), String::from_utf8_lossy(&o.stdout))))
+    };
+    let mut text = run(false)?;
+    if text.as_deref().is_some_and(|t| t.contains("--check-locations") && t.contains("Unknown command line argument")) {
+        text = run(true)?;
     }
-    cmd.current_dir(file.parent().unwrap_or(Path::new(".")));
-    let output = cmd.output().with_context(|| format!("cannot run {}", exe.display()))?;
-    // clangd logs to stderr.
-    let text = format!("{}{}", String::from_utf8_lossy(&output.stderr), String::from_utf8_lossy(&output.stdout));
+    let Some(text) = text else {
+        return Ok(CheckResult {
+            file: paths::normalize(file),
+            errors: None,
+            diagnostics: Vec::new(),
+            from_database: false,
+            timed_out: true,
+        });
+    };
     let errors = ALL_CHECKS.captures(&text).and_then(|c| c[1].parse().ok());
     let diagnostics = text
         .lines()
         .filter_map(|l| DIAGNOSTIC.find(l).map(|m| m.as_str().trim_start_matches("] ").to_string()))
         .collect();
     let from_database = text.contains("Compile command from CDB is");
-    Ok(CheckResult { file: paths::normalize(file), errors, diagnostics, from_database })
+    Ok(CheckResult { file: paths::normalize(file), errors, diagnostics, from_database, timed_out: false })
+}
+
+/// The output of `cmd`, or `None` when it did not end within `timeout` (it is then killed).
+fn output_within(mut cmd: Command, timeout: Duration) -> std::io::Result<Option<std::process::Output>> {
+    use std::io::Read;
+    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    // Read both pipes on their own threads, so a full pipe never blocks the child.
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let stdout = drain(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let stderr = drain(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let stdout = stdout.join().unwrap_or_default();
+    let stderr = stderr.join().unwrap_or_default();
+    Ok(Some(std::process::Output { status, stdout, stderr }))
 }
 
 #[cfg(test)]
@@ -210,6 +271,20 @@ mod tests {
         let path = dir.path().join(FILE_NAME);
         std::fs::write(&path, text).unwrap();
         inspect(&path)
+    }
+
+    #[test]
+    fn a_slow_command_is_ended() {
+        let mut slow = Command::new("cmd");
+        slow.args(["/c", "ping -n 30 127.0.0.1 >nul"]);
+        let started = Instant::now();
+        assert!(output_within(slow, Duration::from_millis(300)).unwrap().is_none());
+        assert!(started.elapsed() < Duration::from_secs(10));
+        let mut quick = Command::new("cmd");
+        quick.args(["/c", "echo out& echo err 1>&2"]);
+        let output = output_within(quick, Duration::from_secs(30)).unwrap().unwrap();
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "out");
+        assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), "err");
     }
 
     #[test]

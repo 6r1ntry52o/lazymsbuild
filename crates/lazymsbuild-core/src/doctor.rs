@@ -365,6 +365,9 @@ fn workspace_checks(
                     };
                     let mut detail = match errors {
                         Some(n) => format!("{n} error(s)"),
+                        None if result.timed_out => {
+                            format!("clangd did not finish within {} s", clangd::CHECK_TIMEOUT.as_secs())
+                        }
                         None => "clangd did not finish".into(),
                     };
                     if !result.from_database {

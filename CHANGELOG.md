@@ -26,6 +26,9 @@ events) carry a `format_version` and follow the same rules.
 - Method A: `sync` through msbuild-extractor-sample, following `msbuild-extractor.json`.
 - One database per configuration, with upsert, rebuild replacement, and garbage collection by the
   project's source list; published atomically to `compile_commands.json`.
+- Sources a target adds while the build runs (not listed in the project file) keep their entries
+  and are not reported as orphans.
+- The first configuration is Debug on this machine's platform when the solution has one.
 - Paths are compared case-insensitively and with 8.3 short names (`C:\Users\RUNNER~1`) written in
   full, so a solution opened through `%TEMP%` matches what MSBuild reports.
 - `init`, `sync`, `build`, `check`, `doctor`, `path` and `completions` commands, with `--json`,
@@ -35,7 +38,8 @@ events) carry a `format_version` and follow the same rules.
   whether the generated files are kept out of Git.
 - `doctor`: the solution, MSBuild, the design-time extractor (and its `hostfxr.dll`), the build
   logger, clangd and its configuration, `.clangd`, Git and the database, and the tools alone when
-  no solution can be chosen; `--report` masks paths and leaves out project, file and
+  no solution can be chosen (`clangd --check` with `--check-locations=false`, at most 120 s per
+  file); `--report` masks paths and leaves out project, file and
   configuration names, for bug reports.
 - `--solution` is remembered: later commands and editors use the same solution.
 - The TUI: targets as a tree of solution folders, configurations, actions, log and errors, and

@@ -230,7 +230,8 @@ impl Workspace {
     }
 
     /// The configuration to start with: the `profile` setting, then the one
-    /// `msbuild-extractor.json` declares, then the first the solution lists.
+    /// `msbuild-extractor.json` declares, then Debug for this machine's platform (solutions often
+    /// list `Debug|ARM64` or `Debug|Win32` first), then the first the solution lists.
     pub fn default_profile(&self) -> Option<Profile> {
         if let Some(profile) = self.config.profile.as_deref().and_then(|p| self.solution.find_profile(p)) {
             return Some(profile.clone());
@@ -241,7 +242,7 @@ impl Workspace {
         {
             return Some(declared);
         }
-        self.solution.profiles.first().cloned()
+        preferred_profile(&self.solution.profiles, std::env::consts::ARCH).cloned()
     }
 
     /// Makes `profile` the active configuration and remembers it.
@@ -297,6 +298,23 @@ impl Workspace {
 }
 
 /// `<state root>\<repo name>-<hash of the root path>`.
+/// Debug on the platform of `arch` (a Rust `target_arch`), then any configuration on it, then
+/// the first.
+fn preferred_profile<'a>(profiles: &'a [Profile], arch: &str) -> Option<&'a Profile> {
+    let platforms: &[&str] = match arch {
+        "aarch64" => &["ARM64"],
+        "x86" => &["Win32", "x86"],
+        _ => &["x64"],
+    };
+    let native = |p: &&Profile| platforms.iter().any(|n| p.platform.eq_ignore_ascii_case(n));
+    profiles
+        .iter()
+        .filter(native)
+        .find(|p| p.configuration.eq_ignore_ascii_case("Debug"))
+        .or_else(|| profiles.iter().find(native))
+        .or_else(|| profiles.first())
+}
+
 pub fn state_dir_for(state_root: &Path, root: &Path) -> PathBuf {
     let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "root".into());
     state_root.join(format!("{}-{}", paths::file_name_safe(&name), paths::hash8(&paths::key(root))))
@@ -305,4 +323,26 @@ pub fn state_dir_for(state_root: &Path, root: &Path) -> PathBuf {
 fn read_local_state(state_dir: &Path) -> LocalState {
     let path = state_dir.join("state.json");
     std::fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_on_this_machines_platform_comes_first() {
+        let profiles: Vec<Profile> = ["Debug|ARM64", "Debug|Win32", "Debug|x64", "Release|x64"]
+            .iter()
+            .map(|p| {
+                let (configuration, platform) = p.split_once('|').unwrap();
+                Profile { configuration: configuration.into(), platform: platform.into() }
+            })
+            .collect();
+        let pick = |arch| preferred_profile(&profiles, arch).unwrap().to_string();
+        assert_eq!(pick("x86_64"), "Debug|x64");
+        assert_eq!(pick("aarch64"), "Debug|ARM64");
+        assert_eq!(pick("x86"), "Debug|Win32");
+        assert_eq!(preferred_profile(&profiles[3..], "aarch64").unwrap().to_string(), "Release|x64");
+        assert_eq!(preferred_profile(&profiles[2..], "x86_64").unwrap().to_string(), "Debug|x64");
+    }
 }

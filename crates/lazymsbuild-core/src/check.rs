@@ -4,7 +4,7 @@
 //! |---|---|
 //! | coverage | sources the configuration compiles (not `ExcludedFromBuild`) that have an entry |
 //! | freshness | projects whose project files (`.vcxproj`, imports from the repository, `Directory.Build.*`, the solution) changed after their entries were captured |
-//! | orphans | entries of sources no project lists (dropped by the next GC) |
+//! | orphans | entries of sources no project lists and no build compiled (dropped by the next GC) |
 //! | duplicates | sources several projects compile |
 //! | sync | the published `compile_commands.json` equals the configuration's database |
 //! | dual databases | another `compile_commands.json` that clangd would find instead of, or as well as, ours |
@@ -19,6 +19,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::config::OutputMode;
+use crate::extract::Method;
 use crate::solution::Profile;
 use crate::store::{self, ProfileDb};
 use crate::vcxproj::ProjectFile;
@@ -240,6 +241,8 @@ pub fn run_with(
         .entries
         .iter()
         .filter(|(k, _)| !listed_anywhere.contains(*k))
+        // A build compiled it, so its project has it, even if only a target adds it.
+        .filter(|(k, _)| db.meta.entries.get(*k).is_none_or(|m| m.method != Method::Build))
         .map(|(_, e)| workspace.display_path(Path::new(&e.file)))
         .collect();
     let duplicates: Vec<Duplicate> = compiled_by
