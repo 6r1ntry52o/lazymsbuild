@@ -205,11 +205,19 @@ fn panes_cursors_and_target_selection() {
 #[test]
 fn switching_the_configuration() {
     let mut h = harness();
-    // Down a row is Release; ] moves across to x86; [ back; Enter on Debug|x86.
-    h.keys("2j]][k");
-    assert_eq!(h.app.config_cursor, (0, 0), "[ and ] move across and stop at the ends");
+    // Down a row is Release; l moves across to x86 and k up to Debug|x86.
+    h.keys("2jlk");
+    assert_eq!(h.app.config_cursor, (0, 1));
+    h.keys("l");
+    assert_eq!(h.app.focus, Pane::Actions, "past the last platform is the next pane");
+    h.keys("2hh");
+    assert_eq!(h.app.focus, Pane::Targets, "past the first platform is the previous pane");
+    h.keys("2");
+    h.key(KeyCode::Right);
+    assert_eq!((h.app.focus, h.app.config_cursor), (Pane::Configs, (0, 1)), "the arrows move too");
     h.keys("]");
-    assert_eq!(h.app.focus, Pane::Configs, "[ and ] stay in the pane");
+    assert_eq!(h.app.focus, Pane::Log, "[ and ] are the Log / Errors tabs");
+    h.keys("2");
     h.key(KeyCode::Enter);
     h.wait_for(Duration::from_secs(30), |app| app.active == Profile::new("Debug", "x86"));
     // No database yet: the app offers a sync (or explains when there is no extractor).

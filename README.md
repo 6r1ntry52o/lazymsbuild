@@ -93,9 +93,9 @@ lazygit; every one can be changed in `[keys]` of the configuration.
 
 | Key | Action |
 |---|---|
-| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | Switch panes |
+| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | Switch panes (in the configuration table `h`, `l`, `←`, `→` move across the platforms first) |
 | `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | Move, scroll |
-| `[`, `]` | Switch tabs in a pane (Log / Errors); the platform in the configuration table |
+| `[`, `]` | Switch tabs in a pane (Log / Errors) |
 | `Enter`, `Space` | Select the target or the configuration |
 | `/` | Filter the list |
 | `?` | Show all keys |

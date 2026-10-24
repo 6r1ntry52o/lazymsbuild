@@ -68,9 +68,9 @@ b build · r rebuild · c clean · s sync · x menu · ? help · q quit
 
 | キー | 動作 |
 |---|---|
-| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | ペインの切り替え |
+| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | ペインの切り替え（構成の表では `h`、`l`、`←`、`→` がまず Platform を動かす） |
 | `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | 移動、スクロール |
-| `[`, `]` | ペイン内のタブの切り替え（Log / Errors）。構成の表では Platform の切り替え |
+| `[`, `]` | ペイン内のタブの切り替え（Log / Errors） |
 | `Enter`, `Space` | ターゲットや構成を選ぶ |
 | `/` | 一覧の絞り込み |
 | `?` | すべてのキーを表示 |

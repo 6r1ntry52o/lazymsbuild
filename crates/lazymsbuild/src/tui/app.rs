@@ -857,11 +857,16 @@ impl App {
             Action::PageDown => self.move_cursor(self.page.max(2) as isize / 2),
             Action::Top => self.move_cursor(isize::MIN / 2),
             Action::Bottom => self.move_cursor(isize::MAX / 2),
-            // In the configuration table the "tabs" are the platforms.
-            Action::PrevTab | Action::NextTab if self.focus == Pane::Configs => {
-                let delta: isize = if action == Action::PrevTab { -1 } else { 1 };
-                let last = self.grid.platforms.len().saturating_sub(1) as isize;
-                self.config_cursor.1 = (self.config_cursor.1 as isize + delta).clamp(0, last) as usize;
+            // In the configuration table left and right move across the platforms, and past the
+            // first or last one to the neighbouring pane.
+            Action::Left | Action::Right => {
+                let delta: isize = if action == Action::Left { -1 } else { 1 };
+                let column = self.config_cursor.1 as isize + delta;
+                if self.focus == Pane::Configs && (0..self.grid.platforms.len() as isize).contains(&column) {
+                    self.config_cursor.1 = column as usize;
+                } else {
+                    self.focus = self.focus.next(delta);
+                }
             }
             Action::PrevTab | Action::NextTab => {
                 self.tab = if self.tab == LogTab::Log { LogTab::Errors } else { LogTab::Log };
