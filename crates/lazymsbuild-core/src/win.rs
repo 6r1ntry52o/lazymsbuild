@@ -1,13 +1,14 @@
 //! The Windows API calls lazymsbuild needs, behind safe wrappers.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io;
-use std::os::windows::ffi::OsStrExt;
-use std::path::Path;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
 use std::ptr;
 
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Globalization::{GetACP, GetOEMCP, MultiByteToWideChar};
+use windows_sys::Win32::Storage::FileSystem::GetLongPathNameW;
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
@@ -168,6 +169,32 @@ pub fn shell_open(path: &Path) -> io::Result<()> {
         return Err(io::Error::other(format!("ShellExecuteW failed ({})", result as isize)));
     }
     Ok(())
+}
+
+/// `path` with its 8.3 short names (`RUNNER~1`) written in full; `None` when it does not exist.
+pub fn long_path_name(path: &Path) -> Option<PathBuf> {
+    path_name(path, GetLongPathNameW)
+}
+
+/// `path` with 8.3 short names where the volume has them; `None` when it does not exist.
+#[cfg(test)]
+pub fn short_path_name(path: &Path) -> Option<PathBuf> {
+    path_name(path, windows_sys::Win32::Storage::FileSystem::GetShortPathNameW)
+}
+
+fn path_name(path: &Path, convert: unsafe extern "system" fn(*const u16, *mut u16, u32) -> u32) -> Option<PathBuf> {
+    let input = wide(path.as_os_str());
+    let mut buffer = vec![0u16; 260];
+    loop {
+        // SAFETY: `input` is NUL-terminated and `buffer` has room for `buffer.len()` units.
+        let len = unsafe { convert(input.as_ptr(), buffer.as_mut_ptr(), buffer.len() as u32) } as usize;
+        match len {
+            0 => return None,
+            // Too small: `len` is the size needed, with the NUL.
+            len if len > buffer.len() => buffer.resize(len, 0),
+            len => return Some(PathBuf::from(OsString::from_wide(&buffer[..len]))),
+        }
+    }
 }
 
 fn wide(s: &OsStr) -> Vec<u16> {

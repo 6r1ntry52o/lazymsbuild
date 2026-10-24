@@ -8,10 +8,29 @@ use std::path::{Component, MAIN_SEPARATOR_STR, Path, PathBuf, Prefix};
 
 use sha2::{Digest, Sha256};
 
-/// Resolves `.` and `..` and writes every separator as the platform's, without touching the
-/// file system, so it also works for files that no longer exist. A `\\?\` prefix is dropped and
-/// the drive letter is upper-cased.
+/// Resolves `.` and `..` and writes every separator as the platform's, so it also works for files
+/// that no longer exist. A `\\?\` prefix is dropped and the drive letter is upper-cased.
+///
+/// The file system is asked only when an absolute path has a `~` in it: an 8.3 short name
+/// (`C:\Users\RUNNER~1`, which `%TEMP%` can be) is written in full, as far as the path exists, so
+/// that it compares equal to the long spelling MSBuild uses.
 pub fn normalize(path: &Path) -> PathBuf {
+    let plain = normalize_lexically(path);
+    if plain.has_root() && plain.as_os_str().to_string_lossy().contains('~') { long_names(plain) } else { plain }
+}
+
+fn long_names(path: PathBuf) -> PathBuf {
+    for existing in path.ancestors() {
+        if let Some(long) = crate::win::long_path_name(existing) {
+            let rest = path.strip_prefix(existing).unwrap_or(Path::new(""));
+            let full = if rest.as_os_str().is_empty() { long } else { long.join(rest) };
+            return normalize_lexically(&full);
+        }
+    }
+    path
+}
+
+fn normalize_lexically(path: &Path) -> PathBuf {
     let mut prefix: Option<OsString> = None;
     let mut has_root = false;
     let mut parts: Vec<&OsStr> = Vec::new();
@@ -143,6 +162,21 @@ pub fn file_name_safe(name: &str) -> String {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn short_names_are_written_in_full() {
+        let dir = tempfile::tempdir().unwrap();
+        let long = normalize(&std::path::absolute(dir.path()).unwrap().join("a long directory name"));
+        std::fs::create_dir(&long).unwrap();
+        let short = crate::win::short_path_name(&long).unwrap();
+        if !short.to_string_lossy().contains('~') {
+            eprintln!("skipped: this volume has no 8.3 names");
+            return;
+        }
+        assert_eq!(normalize(&short), long);
+        assert_eq!(normalize(&short.join(r"missing\file.cpp")), long.join(r"missing\file.cpp"));
+        assert!(same(&short.join("x.cpp"), &long.join("X.cpp")));
+    }
 
     #[test]
     fn normalize_resolves_dots_and_separators() {

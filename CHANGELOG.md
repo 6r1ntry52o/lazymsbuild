@@ -26,6 +26,8 @@ events) carry a `format_version` and follow the same rules.
 - Method A: `sync` through msbuild-extractor-sample, following `msbuild-extractor.json`.
 - One database per configuration, with upsert, rebuild replacement, and garbage collection by the
   project's source list; published atomically to `compile_commands.json`.
+- Paths are compared case-insensitively and with 8.3 short names (`C:\Users\RUNNER~1`) written in
+  full, so a solution opened through `%TEMP%` matches what MSBuild reports.
 - `init`, `sync`, `build`, `check`, `doctor`, `path` and `completions` commands, with `--json`,
   `-C`, `--solution`, `-q` and `-v`.
 - `check`: coverage, stale projects, entries of deleted files, duplicates, whether
