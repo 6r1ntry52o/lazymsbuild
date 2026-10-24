@@ -65,7 +65,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let [main, hint] = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(frame.area());
     if main.width < 70 {
         let pane = app.focus;
-        draw_pane(frame, app, &theme, pane, main);
+        if pane == Pane::Log && main.height >= 14 {
+            draw_right(frame, app, &theme, main);
+        } else {
+            draw_pane(frame, app, &theme, pane, main);
+        }
     } else {
         let [left, right] = Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)]).areas(main);
         let configs_height = (app.grid.configurations.len() as u16 + 3).clamp(4, 10);
@@ -75,21 +79,22 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             Constraint::Length(ACTIONS.len() as u16 + 2),
         ])
         .areas(left);
-        let [log, db] = Layout::vertical([Constraint::Min(4), Constraint::Length(7)]).areas(right);
-        for (pane, area) in [
-            (Pane::Targets, targets),
-            (Pane::Configs, configs),
-            (Pane::Actions, actions),
-            (Pane::Log, log),
-            (Pane::Db, db),
-        ] {
+        for (pane, area) in [(Pane::Targets, targets), (Pane::Configs, configs), (Pane::Actions, actions)] {
             draw_pane(frame, app, &theme, pane, area);
         }
+        draw_right(frame, app, &theme, right);
     }
     draw_hint(frame, app, &theme, hint);
     if app.popup.is_some() {
         draw_popup(frame, app, &theme);
     }
+}
+
+/// The log over the database status, which is only shown (it has no focus of its own).
+fn draw_right(frame: &mut Frame, app: &mut App, theme: &Theme, area: Rect) {
+    let [log, db] = Layout::vertical([Constraint::Min(4), Constraint::Length(7)]).areas(area);
+    draw_pane(frame, app, theme, Pane::Log, log);
+    draw_db(frame, app, theme, db);
 }
 
 fn pane_block<'a>(title: Line<'a>, focused: bool, theme: &Theme) -> Block<'a> {
@@ -107,7 +112,6 @@ fn draw_pane(frame: &mut Frame, app: &mut App, theme: &Theme, pane: Pane, area: 
         Pane::Configs => draw_configs(frame, app, theme, area, focused),
         Pane::Actions => draw_actions(frame, app, theme, area, focused),
         Pane::Log => draw_log(frame, app, theme, area, focused),
-        Pane::Db => draw_db(frame, app, theme, area, focused),
     }
 }
 
@@ -241,7 +245,7 @@ fn draw_log(frame: &mut Frame, app: &mut App, theme: &Theme, area: Rect, focused
         _ => (app.errors(), app.warnings()),
     };
     let mut title = vec![
-        Span::raw("[4] "),
+        Span::raw("[0] "),
         tab("Log".into(), app.tab == LogTab::Log),
         Span::raw(" | "),
         tab(format!("Errors (E:{errors} W:{warnings})"), app.tab == LogTab::Errors),
@@ -255,6 +259,7 @@ fn draw_log(frame: &mut Frame, app: &mut App, theme: &Theme, area: Rect, focused
     let block = pane_block(Line::from(title), focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    app.log_page = inner.height as usize;
 
     match app.tab {
         LogTab::Log => {
@@ -364,12 +369,12 @@ fn file_name(path: &str) -> String {
     std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string())
 }
 
-fn draw_db(frame: &mut Frame, app: &App, theme: &Theme, area: Rect, focused: bool) {
-    let mut title = vec![Span::raw("[5] clangd DB Status")];
+fn draw_db(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
+    let mut title = vec![Span::raw("clangd DB Status")];
     if app.checking {
         title.push(Span::styled(" checking…", theme.dim()));
     }
-    let block = pane_block(Line::from(title), focused, theme);
+    let block = pane_block(Line::from(title), false, theme);
     let label = |text: &str| Span::styled(format!("{text:<9}: "), theme.dim());
     let mode = init::mode_name(app.ws.output_mode());
     let lines: Vec<Line> = match &app.check {
@@ -460,7 +465,7 @@ fn draw_hint(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
     } else if let Some(notice) = &app.notice {
         Line::styled(notice.text.clone(), if notice.error { theme.error() } else { theme.fg(Color::Green) })
     } else {
-        let narrow = if frame.area().width < 70 { " · 1-5 pane" } else { "" };
+        let narrow = if frame.area().width < 70 { " · 1-3/0 pane" } else { "" };
         Line::styled(
             format!(
                 "{} build · {} rebuild · {} clean · {} sync · {} menu · {} help · {} quit{narrow}",

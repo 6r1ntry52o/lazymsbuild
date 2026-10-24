@@ -11,8 +11,7 @@ pub enum Action {
     Pane1,
     Pane2,
     Pane3,
-    Pane4,
-    Pane5,
+    FocusMain,
     NextPane,
     PrevPane,
     Up,
@@ -21,6 +20,8 @@ pub enum Action {
     Bottom,
     PageUp,
     PageDown,
+    ScrollMainUp,
+    ScrollMainDown,
     PrevTab,
     NextTab,
     Select,
@@ -39,12 +40,11 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 28] = [
+    pub const ALL: [Action; 29] = [
         Action::Pane1,
         Action::Pane2,
         Action::Pane3,
-        Action::Pane4,
-        Action::Pane5,
+        Action::FocusMain,
         Action::NextPane,
         Action::PrevPane,
         Action::Up,
@@ -53,6 +53,8 @@ impl Action {
         Action::Bottom,
         Action::PageUp,
         Action::PageDown,
+        Action::ScrollMainUp,
+        Action::ScrollMainDown,
         Action::PrevTab,
         Action::NextTab,
         Action::Select,
@@ -76,8 +78,7 @@ impl Action {
             Action::Pane1 => "pane_1",
             Action::Pane2 => "pane_2",
             Action::Pane3 => "pane_3",
-            Action::Pane4 => "pane_4",
-            Action::Pane5 => "pane_5",
+            Action::FocusMain => "focus_main",
             Action::NextPane => "next_pane",
             Action::PrevPane => "prev_pane",
             Action::Up => "up",
@@ -86,6 +87,8 @@ impl Action {
             Action::Bottom => "bottom",
             Action::PageUp => "page_up",
             Action::PageDown => "page_down",
+            Action::ScrollMainUp => "scroll_main_up",
+            Action::ScrollMainDown => "scroll_main_down",
             Action::PrevTab => "prev_tab",
             Action::NextTab => "next_tab",
             Action::Select => "select",
@@ -109,16 +112,17 @@ impl Action {
             Action::Pane1 => "Solution & Targets",
             Action::Pane2 => "Configuration / Platform",
             Action::Pane3 => "Actions & Options",
-            Action::Pane4 => "Log | Errors",
-            Action::Pane5 => "clangd DB Status",
-            Action::NextPane => "Next pane",
-            Action::PrevPane => "Previous pane",
+            Action::FocusMain => "Log | Errors (Esc goes back)",
+            Action::NextPane => "Next pane on the left",
+            Action::PrevPane => "Previous pane on the left",
             Action::Up => "Up",
             Action::Down => "Down",
             Action::Top => "Top",
             Action::Bottom => "Bottom",
-            Action::PageUp => "Half page up",
-            Action::PageDown => "Half page down",
+            Action::PageUp => "Page up",
+            Action::PageDown => "Page down",
+            Action::ScrollMainUp => "Scroll the log up",
+            Action::ScrollMainDown => "Scroll the log down",
             Action::PrevTab => "Previous tab (Log / Errors)",
             Action::NextTab => "Next tab (Log / Errors)",
             Action::Select => "Select the target or configuration; run the action",
@@ -132,7 +136,7 @@ impl Action {
             Action::Parallel => "Parallel builds (-m) on/off",
             Action::Edit => "Open the selected error in the editor",
             Action::Cancel => "Cancel the build (asks first); quit when idle",
-            Action::Close => "Close the filter or the menu",
+            Action::Close => "Close the filter or the menu; leave the log",
             Action::Quit => "Quit (asks first during a build)",
         }
     }
@@ -142,16 +146,17 @@ impl Action {
             Action::Pane1 => &["1"],
             Action::Pane2 => &["2"],
             Action::Pane3 => &["3"],
-            Action::Pane4 => &["4"],
-            Action::Pane5 => &["5"],
+            Action::FocusMain => &["0"],
             Action::NextPane => &["tab", "l"],
             Action::PrevPane => &["shift+tab", "h"],
             Action::Up => &["k", "up"],
             Action::Down => &["j", "down"],
-            Action::Top => &["g", "home"],
-            Action::Bottom => &["G", "end"],
-            Action::PageUp => &["ctrl+u", "pageup"],
-            Action::PageDown => &["ctrl+d", "pagedown"],
+            Action::Top => &["g", "<", "home"],
+            Action::Bottom => &["G", ">", "end"],
+            Action::PageUp => &[","],
+            Action::PageDown => &["."],
+            Action::ScrollMainUp => &["K", "pageup", "ctrl+u"],
+            Action::ScrollMainDown => &["J", "pagedown", "ctrl+d"],
             Action::PrevTab => &["["],
             Action::NextTab => &["]"],
             Action::Select => &["enter", "space"],
@@ -371,7 +376,11 @@ mod tests {
         check(KeyCode::Char('b'), KeyModifiers::NONE, Action::Build);
         check(KeyCode::Char('G'), KeyModifiers::SHIFT, Action::Bottom);
         check(KeyCode::Char('g'), KeyModifiers::NONE, Action::Top);
-        check(KeyCode::Char('u'), KeyModifiers::CONTROL, Action::PageUp);
+        check(KeyCode::Char('>'), KeyModifiers::SHIFT, Action::Bottom);
+        check(KeyCode::Char(','), KeyModifiers::NONE, Action::PageUp);
+        check(KeyCode::Char('u'), KeyModifiers::CONTROL, Action::ScrollMainUp);
+        check(KeyCode::Char('J'), KeyModifiers::SHIFT, Action::ScrollMainDown);
+        check(KeyCode::Char('0'), KeyModifiers::NONE, Action::FocusMain);
         check(KeyCode::Char('c'), KeyModifiers::CONTROL, Action::Cancel);
         check(KeyCode::Char('c'), KeyModifiers::NONE, Action::Clean);
         check(KeyCode::BackTab, KeyModifiers::SHIFT, Action::PrevPane);

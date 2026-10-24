@@ -105,11 +105,13 @@ Each TUI action takes a key or a list of keys, which replace its defaults. Keys 
 
 | Action | Default | |
 |---|---|---|
-| `pane_1` … `pane_5` | `1` … `5` | Go to a pane |
-| `next_pane`, `prev_pane` | `tab` `l`, `shift+tab` `h` | Cycle the panes |
+| `pane_1` … `pane_3` | `1` … `3` | Go to a pane on the left |
+| `focus_main` | `0` | Go to the log (`esc`, `tab`, `h` and `l` go back) |
+| `next_pane`, `prev_pane` | `tab` `l`, `shift+tab` `h` | Cycle the panes on the left |
 | `up`, `down` | `k` `up`, `j` `down` | Move, scroll |
-| `top`, `bottom` | `g` `home`, `G` `end` | First, last (in the log: back to following the output) |
-| `page_up`, `page_down` | `ctrl+u` `pageup`, `ctrl+d` `pagedown` | Half a page |
+| `top`, `bottom` | `g` `<` `home`, `G` `>` `end` | First, last (in the log: back to following the output) |
+| `page_up`, `page_down` | `,`, `.` | A page |
+| `scroll_main_up`, `scroll_main_down` | `K` `pageup` `ctrl+u`, `J` `pagedown` `ctrl+d` | Scroll the log half a page from any pane |
 | `prev_tab`, `next_tab` | `[`, `]` | Log / Errors |
 | `select` | `enter` `space` | Select the target or configuration; run the action |
 | `filter` | `/` | Filter the targets |
@@ -120,7 +122,7 @@ Each TUI action takes a key or a list of keys, which replace its defaults. Keys 
 | `parallel` | `m` | `-m` on/off |
 | `edit` | `e` | Open the selected error |
 | `cancel` | `ctrl+c` | Cancel the build (asks first); quit when idle |
-| `close` | `esc` | Close the filter or a menu |
+| `close` | `esc` | Close the filter or a menu; leave the log |
 | `quit` | `q` | Quit (asks first during a build) |
 
 ## Environment variables

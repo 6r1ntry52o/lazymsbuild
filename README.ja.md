@@ -5,7 +5,7 @@
 [lazygit](https://github.com/jesseduffield/lazygit) 風の MSBuild 用ターミナル UI です。`compile_commands.json` を常に完全な状態に保ち、clangd（と clang-tidy、それらを使うすべてのエディタ）が Visual Studio の C++ ソリューションを、インクルードパスも定義もすべてのファイルも含めて理解できるようにします。
 
 ```text
-╭[1] Solution & Targets────────────╮╭[4] Log | Errors (E:0 W:0)────────────────────────────────╮
+╭[1] Solution & Targets────────────╮╭[0] Log | Errors (E:0 W:0)────────────────────────────────╮
 │> [Solution] Demo.sln ●           ││  core.cpp                                                │
 │  ├─ Libs/                        ││  engine.cpp                                              │
 │  │   └─ CoreEngine               ││  CoreEngine.vcxproj -> C:\src\demo\x64\Debug\CoreEngine.l│
@@ -19,7 +19,7 @@
 │ Debug      ·     ●     ·         ││xe                                                        │
 │ Release    ·     ◆               ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
 ╰ ● active  ◆ database ────────────╯╰──────────────────────────────────────────────────────────╯
-╭[3] Actions & Options─────────────╮╭[5] clangd DB Status──────────────────────────────────────╮
+╭[3] Actions & Options─────────────╮╭clangd DB Status──────────────────────────────────────────╮
 │ b Build                          ││Profile  : Debug|x64            Mode     : repo-root      │
 │ r Rebuild                        ││Entries  : 6 (+6)               Coverage : 6/6            │
 │ c Clean                          ││Stale    : none                 Updated  : 12:03:11       │
@@ -68,8 +68,10 @@ b build · r rebuild · c clean · s sync · x menu · ? help · q quit
 
 | キー | 動作 |
 |---|---|
-| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | ペインの切り替え |
-| `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | 移動、スクロール（構成の表では Platform の列を上から下へ、続けて次の列へ） |
+| `1`-`3`, `Tab`, `Shift+Tab`, `h`, `l` | 左のペインの切り替え |
+| `0`, `Esc` | ログ（Log / Errors）へ移る、戻る |
+| `j`, `k`, `↑`, `↓`, `g`, `G`, `<`, `>`, `,`, `.` | 移動、ページ送り（構成の表では Platform の列を上から下へ、続けて次の列へ） |
+| `J`, `K`, `Ctrl+d`, `Ctrl+u`, `PgDn`, `PgUp` | どのペインからでもログをスクロール |
 | `[`, `]` | ペイン内のタブの切り替え（Log / Errors） |
 | `Enter`, `Space` | ターゲットや構成を選ぶ |
 | `/` | 一覧の絞り込み |
@@ -80,7 +82,7 @@ b build · r rebuild · c clean · s sync · x menu · ? help · q quit
 | `m` | 並列ビルド（`-m`）の切り替え |
 | `e` | 選んだエラーをエディタでその行に開く（`ui.edit_at_line`、無ければ `$EDITOR`、`$VISUAL`、既定のアプリ） |
 | `Ctrl+c` | ビルドの中止（確認あり）。何も走っていなければ終了 |
-| `Esc` | 絞り込みやメニューを閉じる |
+| `Esc` | 絞り込みやメニューを閉じる、ログから戻る |
 | `q` | 終了（ビルド中は確認あり） |
 
 ビルド中も、移動、ログのスクロール、DB の状態の確認ができます。別のビルド、構成の切り替え、クリーン、同期は、ビルドが終わるまで待ちます。

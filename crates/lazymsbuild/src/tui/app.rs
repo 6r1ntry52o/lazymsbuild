@@ -30,8 +30,8 @@ pub enum Pane {
     Targets,
     Configs,
     Actions,
+    /// The main view on the right, as in lazygit: `0` enters it, Esc leaves it.
     Log,
-    Db,
 }
 
 /// The configurations as a table: configurations down, platforms across, each in the order the
@@ -77,7 +77,8 @@ impl ConfigGrid {
 }
 
 impl Pane {
-    const ORDER: [Pane; 5] = [Pane::Targets, Pane::Configs, Pane::Actions, Pane::Log, Pane::Db];
+    /// The panes on the left, which `h`, `l` and Tab go round.
+    const ORDER: [Pane; 3] = [Pane::Targets, Pane::Configs, Pane::Actions];
 
     fn next(self, step: isize) -> Pane {
         let i = Pane::ORDER.iter().position(|p| *p == self).unwrap_or(0) as isize;
@@ -244,6 +245,8 @@ pub struct App {
     pub ws: Workspace,
     pub keymap: Keymap,
     pub focus: Pane,
+    /// The pane on the left that was focused last, where leaving the log goes back to.
+    side: Pane,
     pub rows: Vec<Row>,
     pub tree_cursor: usize,
     /// The selected project (an index into the solution's projects); `None` is the solution.
@@ -280,6 +283,8 @@ pub struct App {
     pub last_log: Option<PathBuf>,
     /// Lines a page moves (set from the pane height while drawing).
     pub page: usize,
+    /// Lines a page of the log moves, from the log pane whichever pane is focused.
+    pub log_page: usize,
     events: mpsc::UnboundedSender<Event>,
     done: mpsc::UnboundedSender<Done>,
 }
@@ -309,6 +314,7 @@ impl App {
         let mut app = App {
             keymap,
             focus: Pane::Targets,
+            side: Pane::Targets,
             rows,
             tree_cursor: 0,
             target: None,
@@ -338,6 +344,7 @@ impl App {
             editor_request: None,
             last_log: None,
             page: 10,
+            log_page: 10,
             events,
             done,
             ws,
@@ -853,14 +860,17 @@ impl App {
             Action::Pane1 => self.focus = Pane::Targets,
             Action::Pane2 => self.focus = Pane::Configs,
             Action::Pane3 => self.focus = Pane::Actions,
-            Action::Pane4 => self.focus = Pane::Log,
-            Action::Pane5 => self.focus = Pane::Db,
+            Action::FocusMain => self.focus = Pane::Log,
+            // From the log, h, l and Tab go back to the left first.
+            Action::NextPane | Action::PrevPane if self.focus == Pane::Log => self.focus = self.side,
             Action::NextPane => self.focus = self.focus.next(1),
             Action::PrevPane => self.focus = self.focus.next(-1),
             Action::Up => self.move_cursor(-1),
             Action::Down => self.move_cursor(1),
-            Action::PageUp => self.move_cursor(-(self.page.max(2) as isize / 2)),
-            Action::PageDown => self.move_cursor(self.page.max(2) as isize / 2),
+            Action::PageUp => self.move_cursor(-(self.page.max(1) as isize)),
+            Action::PageDown => self.move_cursor(self.page.max(1) as isize),
+            Action::ScrollMainUp => self.scroll_log(-(self.log_page.max(2) as isize / 2)),
+            Action::ScrollMainDown => self.scroll_log(self.log_page.max(2) as isize / 2),
             Action::Top => self.move_cursor(isize::MIN / 2),
             Action::Bottom => self.move_cursor(isize::MAX / 2),
             Action::PrevTab | Action::NextTab => {
@@ -907,6 +917,7 @@ impl App {
                     self.quit = true;
                 }
             }
+            Action::Close if self.focus == Pane::Log => self.focus = self.side,
             Action::Close => {}
             Action::Quit => {
                 if self.running.is_some() {
@@ -916,6 +927,16 @@ impl App {
                 }
             }
         }
+        if self.focus != Pane::Log {
+            self.side = self.focus;
+        }
+    }
+
+    /// Scrolls the log (or moves through the errors) from any pane, as lazygit scrolls its main view.
+    fn scroll_log(&mut self, delta: isize) {
+        let focus = std::mem::replace(&mut self.focus, Pane::Log);
+        self.move_cursor(delta);
+        self.focus = focus;
     }
 
     fn move_cursor(&mut self, delta: isize) {
@@ -938,7 +959,6 @@ impl App {
                 LogTab::Log => self.log_scroll = (self.log_scroll as isize - delta).max(0) as usize,
                 LogTab::Errors => self.diag_cursor = clamp(self.diag_cursor, self.diagnostics.len()),
             },
-            Pane::Db => {}
         }
     }
 
@@ -953,10 +973,6 @@ impl App {
             Pane::Actions => self.act(ACTIONS[self.action_cursor]),
             Pane::Log if self.tab == LogTab::Errors => self.edit_selected(),
             Pane::Log => {}
-            Pane::Db => {
-                self.refresh_check();
-                self.notify("refreshing the database status", false);
-            }
         }
     }
 

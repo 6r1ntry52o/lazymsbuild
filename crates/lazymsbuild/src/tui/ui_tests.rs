@@ -131,7 +131,7 @@ fn contains(screen: &[String], text: &str) -> bool {
 }
 
 #[test]
-fn draws_the_five_panes() {
+fn draws_the_panes() {
     let mut h = harness();
     let screen = h.screen(120, 36);
     let dump = screen.join("\n");
@@ -139,8 +139,8 @@ fn draws_the_five_panes() {
         "[1] Solution & Targets",
         "[2] Configuration / Platform",
         "[3] Actions & Options",
-        "[4] Log | Errors (E:0 W:0)",
-        "[5] clangd DB Status",
+        "[0] Log | Errors (E:0 W:0)",
+        "clangd DB Status",
         "[Solution] Basic.sln",
         "Libs/",
         "MyApp.Core",
@@ -169,10 +169,11 @@ fn a_narrow_terminal_shows_only_the_focused_pane() {
     let mut h = harness();
     let screen = h.screen(60, 20);
     assert!(contains(&screen, "[1] Solution & Targets"));
-    assert!(!contains(&screen, "[5] clangd DB Status"));
-    h.key(KeyCode::Char('5'));
+    assert!(!contains(&screen, "clangd DB Status"));
+    h.key(KeyCode::Char('0'));
     let screen = h.screen(60, 20);
-    assert!(contains(&screen, "[5] clangd DB Status"));
+    assert!(contains(&screen, "[0] Log | Errors"), "the log comes with the database status below it");
+    assert!(contains(&screen, "clangd DB Status"));
     assert!(!contains(&screen, "[1] Solution & Targets"));
 }
 
@@ -183,8 +184,17 @@ fn panes_cursors_and_target_selection() {
     assert_eq!(h.app.focus, Pane::Configs);
     h.key_with(KeyCode::BackTab, KeyModifiers::SHIFT);
     assert_eq!(h.app.focus, Pane::Targets);
-    h.keys("4");
+    h.keys("3l");
+    assert_eq!(h.app.focus, Pane::Targets, "h, l and Tab go round the panes on the left only");
+    h.keys("2h");
+    assert_eq!(h.app.focus, Pane::Targets);
+    h.keys("2");
+    h.keys("0");
     assert_eq!(h.app.focus, Pane::Log);
+    h.key(KeyCode::Esc);
+    assert_eq!(h.app.focus, Pane::Configs, "Esc goes back to where the log was entered from");
+    h.keys("0l");
+    assert_eq!(h.app.focus, Pane::Configs);
     h.keys("1");
 
     // Select Util (Legacy): the last folder's project.
@@ -276,7 +286,7 @@ fn long_log_lines_wrap_and_scrolling_holds_still() {
     assert_eq!(view::wrap("", 4), [""]);
 
     let mut h = harness();
-    h.keys("4");
+    h.keys("0");
     let long = format!("C:\\src\\{}\\main.cpp(7,13): error C2065: 'y': undeclared identifier", "dir".repeat(40));
     h.app.on_event(Event::Line(long));
     let screen = h.screen(120, 36);
@@ -298,6 +308,15 @@ fn long_log_lines_wrap_and_scrolling_holds_still() {
     assert!(contains(&h.screen(120, 36), "lazymsbuild 0.1.0"), "g goes to the first line");
     h.keys("G");
     assert!(contains(&h.screen(120, 36), "line 109"), "G follows the output again");
+    assert_eq!(h.app.log_scroll, 0);
+
+    // From a pane on the left, K and J scroll the log, as lazygit scrolls its main view.
+    h.key(KeyCode::Esc);
+    assert_eq!(h.app.focus, Pane::Targets);
+    h.keys("K");
+    assert!(h.app.log_scroll > 0, "K scrolls back");
+    assert_eq!((h.app.focus, h.app.tree_cursor), (Pane::Targets, 0), "the pane keeps its focus and cursor");
+    h.keys("J");
     assert_eq!(h.app.log_scroll, 0);
 }
 

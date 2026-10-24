@@ -165,7 +165,7 @@ fn the_tui_answers_during_a_build_and_cancel_leaves_nothing() {
 
     let started = chrono::Local::now().to_rfc3339();
     let mut tui = Tui::start(&repo, &base.join("state"), &base.join("config"));
-    tui.wait_for(Duration::from_secs(30), "the first screen", |s| s.contains("[5] clangd DB Status"));
+    tui.wait_for(Duration::from_secs(30), "the first screen", |s| s.contains("clangd DB Status"));
     // First start: init is offered. Not now.
     tui.wait_for(Duration::from_secs(10), "the init question", |s| s.contains("Run init?"));
     tui.send(b"n");

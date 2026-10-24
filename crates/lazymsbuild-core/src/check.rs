@@ -1,4 +1,4 @@
-//! "Is the database complete and current?" (`lazymsbuild check`, pane [5] of the TUI).
+//! "Is the database complete and current?" (`lazymsbuild check`, the database status of the TUI).
 //!
 //! | check | meaning |
 //! |---|---|

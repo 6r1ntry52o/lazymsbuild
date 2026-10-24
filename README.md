@@ -7,7 +7,7 @@ A [lazygit](https://github.com/jesseduffield/lazygit)-style terminal UI for MSBu
 understands a Visual Studio C++ solution: its include paths, its defines, all of its files.
 
 ```text
-╭[1] Solution & Targets────────────╮╭[4] Log | Errors (E:0 W:0)────────────────────────────────╮
+╭[1] Solution & Targets────────────╮╭[0] Log | Errors (E:0 W:0)────────────────────────────────╮
 │> [Solution] Demo.sln ●           ││  core.cpp                                                │
 │  ├─ Libs/                        ││  engine.cpp                                              │
 │  │   └─ CoreEngine               ││  CoreEngine.vcxproj -> C:\src\demo\x64\Debug\CoreEngine.l│
@@ -21,7 +21,7 @@ understands a Visual Studio C++ solution: its include paths, its defines, all of
 │ Debug      ·     ●     ·         ││xe                                                        │
 │ Release    ·     ◆               ││Rebuild succeeded in 8.4s: 0 error(s), 0 warning(s)       │
 ╰ ● active  ◆ database ────────────╯╰──────────────────────────────────────────────────────────╯
-╭[3] Actions & Options─────────────╮╭[5] clangd DB Status──────────────────────────────────────╮
+╭[3] Actions & Options─────────────╮╭clangd DB Status──────────────────────────────────────────╮
 │ b Build                          ││Profile  : Debug|x64            Mode     : repo-root      │
 │ r Rebuild                        ││Entries  : 6 (+6)               Coverage : 6/6            │
 │ c Clean                          ││Stale    : none                 Updated  : 12:03:11       │
@@ -93,8 +93,10 @@ lazygit; every one can be changed in `[keys]` of the configuration.
 
 | Key | Action |
 |---|---|
-| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | Switch panes |
-| `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | Move, scroll (in the configuration table: down a platform's column, then on to the next) |
+| `1`-`3`, `Tab`, `Shift+Tab`, `h`, `l` | Switch the panes on the left |
+| `0`, `Esc` | Go to the log (Log / Errors), and back |
+| `j`, `k`, `↑`, `↓`, `g`, `G`, `<`, `>`, `,`, `.` | Move, page (in the configuration table: down a platform's column, then on to the next) |
+| `J`, `K`, `Ctrl+d`, `Ctrl+u`, `PgDn`, `PgUp` | Scroll the log from any pane |
 | `[`, `]` | Switch tabs in a pane (Log / Errors) |
 | `Enter`, `Space` | Select the target or the configuration |
 | `/` | Filter the list |
@@ -105,7 +107,7 @@ lazygit; every one can be changed in `[keys]` of the configuration.
 | `m` | Toggle parallel builds (`-m`) |
 | `e` | Open the selected error in your editor at its line (`ui.edit_at_line`, else `$EDITOR`, `$VISUAL`, the default application) |
 | `Ctrl+c` | Cancel the build (asks first); quit when idle |
-| `Esc` | Close a filter or a menu |
+| `Esc` | Close a filter or a menu; leave the log |
 | `q` | Quit (asks first during a build) |
 
 While a build runs you can move around, scroll the log and read the database status; another
