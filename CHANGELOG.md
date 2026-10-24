@@ -9,6 +9,8 @@ events) carry a `format_version` and follow the same rules.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-25
+
 ### Added
 
 - `.sln` and `.slnx` parsing: C++ projects, nested solution folders, configuration mapping
@@ -59,3 +61,6 @@ events) carry a `format_version` and follow the same rules.
 - Release archives for x64 and ARM64 with the build logger, `SHA256SUMS`, the third-party
   licenses, and cargo-binstall metadata.
 - `README.ja.md`.
+
+[Unreleased]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/6r1ntry52o/lazymsbuild/releases/tag/v0.1.0

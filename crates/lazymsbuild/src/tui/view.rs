@@ -14,6 +14,10 @@ use super::app::{ACTIONS, App, LineKind, LogTab, MenuItem, Pane, Popup};
 use super::keys::Action;
 use super::tree::RowKind;
 
+/// The accent (focused border, chosen target and configuration): Visual Studio's purple.
+/// Success stays green.
+const ACCENT: Color = Color::Rgb(0x86, 0x5F, 0xC5);
+
 struct Theme {
     color: bool,
 }
@@ -29,7 +33,7 @@ impl Theme {
 
     fn focused_border(&self) -> Style {
         if self.color {
-            Style::new().fg(Color::Green).add_modifier(Modifier::BOLD)
+            Style::new().fg(ACCENT).add_modifier(Modifier::BOLD)
         } else {
             Style::new().add_modifier(Modifier::BOLD)
         }
@@ -48,7 +52,7 @@ impl Theme {
     }
 
     fn selected(&self) -> Style {
-        self.fg(Color::Green).add_modifier(Modifier::BOLD)
+        self.fg(ACCENT).add_modifier(Modifier::BOLD)
     }
 
     fn cursor(&self, focused: bool) -> Style {
