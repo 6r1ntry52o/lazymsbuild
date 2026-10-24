@@ -120,8 +120,6 @@
         "pane_5": { "$ref": "#/definitions/keys" },
         "next_pane": { "$ref": "#/definitions/keys" },
         "prev_pane": { "$ref": "#/definitions/keys" },
-        "left": { "$ref": "#/definitions/keys" },
-        "right": { "$ref": "#/definitions/keys" },
         "up": { "$ref": "#/definitions/keys" },
         "down": { "$ref": "#/definitions/keys" },
         "top": { "$ref": "#/definitions/keys" },

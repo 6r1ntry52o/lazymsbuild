@@ -93,8 +93,8 @@ lazygit; every one can be changed in `[keys]` of the configuration.
 
 | Key | Action |
 |---|---|
-| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | Switch panes (in the configuration table `h`, `l`, `←`, `→` move across the platforms first) |
-| `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | Move, scroll |
+| `1`-`5`, `Tab`, `Shift+Tab`, `h`, `l` | Switch panes |
+| `j`, `k`, `↑`, `↓`, `g`, `G`, `Ctrl+u`, `Ctrl+d` | Move, scroll (in the configuration table: down a platform's column, then on to the next) |
 | `[`, `]` | Switch tabs in a pane (Log / Errors) |
 | `Enter`, `Space` | Select the target or the configuration |
 | `/` | Filter the list |

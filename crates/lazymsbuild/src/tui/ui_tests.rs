@@ -205,18 +205,17 @@ fn panes_cursors_and_target_selection() {
 #[test]
 fn switching_the_configuration() {
     let mut h = harness();
-    // Down a row is Release; l moves across to x86 and k up to Debug|x86.
-    h.keys("2jlk");
+    // j goes down the x64 column (Debug, Release), then on to the top of x86.
+    h.keys("2j");
+    assert_eq!(h.app.config_cursor, (1, 0));
+    h.keys("j");
+    assert_eq!(h.app.config_cursor, (0, 1), "after the last row, the next platform");
+    h.keys("G");
+    assert_eq!(h.app.config_cursor, (1, 1));
+    h.keys("gjj");
     assert_eq!(h.app.config_cursor, (0, 1));
     h.keys("l");
-    assert_eq!(h.app.focus, Pane::Actions, "past the last platform is the next pane");
-    h.keys("2hh");
-    assert_eq!(h.app.focus, Pane::Targets, "past the first platform is the previous pane");
-    h.keys("2");
-    h.key(KeyCode::Right);
-    assert_eq!((h.app.focus, h.app.config_cursor), (Pane::Configs, (0, 1)), "the arrows move too");
-    h.keys("]");
-    assert_eq!(h.app.focus, Pane::Log, "[ and ] are the Log / Errors tabs");
+    assert_eq!(h.app.focus, Pane::Actions, "h and l stay pane switching");
     h.keys("2");
     h.key(KeyCode::Enter);
     h.wait_for(Duration::from_secs(30), |app| app.active == Profile::new("Debug", "x86"));
@@ -364,4 +363,5 @@ fn the_configuration_table_keeps_the_solution_order() {
     assert_eq!(grid.profile((2, 1)), Profile::new("Profile", "x64"));
     assert_eq!(grid.position(&Profile::new("Release", "x64")), Some((1, 1)));
     assert_eq!(grid.position(&Profile::new("Release", "Win32")), None);
+    assert_eq!(grid.cells, [(0, 0), (0, 1), (1, 1), (2, 1)], "down each platform, without the empty cells");
 }

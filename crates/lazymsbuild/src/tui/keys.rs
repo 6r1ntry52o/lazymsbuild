@@ -15,8 +15,6 @@ pub enum Action {
     Pane5,
     NextPane,
     PrevPane,
-    Left,
-    Right,
     Up,
     Down,
     Top,
@@ -41,7 +39,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 30] = [
+    pub const ALL: [Action; 28] = [
         Action::Pane1,
         Action::Pane2,
         Action::Pane3,
@@ -49,8 +47,6 @@ impl Action {
         Action::Pane5,
         Action::NextPane,
         Action::PrevPane,
-        Action::Left,
-        Action::Right,
         Action::Up,
         Action::Down,
         Action::Top,
@@ -84,8 +80,6 @@ impl Action {
             Action::Pane5 => "pane_5",
             Action::NextPane => "next_pane",
             Action::PrevPane => "prev_pane",
-            Action::Left => "left",
-            Action::Right => "right",
             Action::Up => "up",
             Action::Down => "down",
             Action::Top => "top",
@@ -119,8 +113,6 @@ impl Action {
             Action::Pane5 => "clangd DB Status",
             Action::NextPane => "Next pane",
             Action::PrevPane => "Previous pane",
-            Action::Left => "Left: the platform in the configuration table, else the previous pane",
-            Action::Right => "Right: the platform in the configuration table, else the next pane",
             Action::Up => "Up",
             Action::Down => "Down",
             Action::Top => "Top",
@@ -152,10 +144,8 @@ impl Action {
             Action::Pane3 => &["3"],
             Action::Pane4 => &["4"],
             Action::Pane5 => &["5"],
-            Action::NextPane => &["tab"],
-            Action::PrevPane => &["shift+tab"],
-            Action::Left => &["h", "left"],
-            Action::Right => &["l", "right"],
+            Action::NextPane => &["tab", "l"],
+            Action::PrevPane => &["shift+tab", "h"],
             Action::Up => &["k", "up"],
             Action::Down => &["j", "down"],
             Action::Top => &["g", "home"],

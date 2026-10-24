@@ -40,6 +40,9 @@ pub enum Pane {
 pub struct ConfigGrid {
     pub configurations: Vec<String>,
     pub platforms: Vec<String>,
+    /// The cells the solution has, in the order the cursor visits them: down a platform's column,
+    /// then on to the next, so that `j` and `k` alone reach every one.
+    pub cells: Vec<(usize, usize)>,
 }
 
 impl ConfigGrid {
@@ -53,6 +56,9 @@ impl ConfigGrid {
                 grid.platforms.push(profile.platform.clone());
             }
         }
+        grid.cells = profiles.iter().filter_map(|p| grid.position(p)).collect();
+        grid.cells.sort_by_key(|&(row, column)| (column, row));
+        grid.cells.dedup();
         grid
     }
 
@@ -857,17 +863,6 @@ impl App {
             Action::PageDown => self.move_cursor(self.page.max(2) as isize / 2),
             Action::Top => self.move_cursor(isize::MIN / 2),
             Action::Bottom => self.move_cursor(isize::MAX / 2),
-            // In the configuration table left and right move across the platforms, and past the
-            // first or last one to the neighbouring pane.
-            Action::Left | Action::Right => {
-                let delta: isize = if action == Action::Left { -1 } else { 1 };
-                let column = self.config_cursor.1 as isize + delta;
-                if self.focus == Pane::Configs && (0..self.grid.platforms.len() as isize).contains(&column) {
-                    self.config_cursor.1 = column as usize;
-                } else {
-                    self.focus = self.focus.next(delta);
-                }
-            }
             Action::PrevTab | Action::NextTab => {
                 self.tab = if self.tab == LogTab::Log { LogTab::Errors } else { LogTab::Log };
                 self.focus = Pane::Log;
@@ -929,7 +924,13 @@ impl App {
         };
         match self.focus {
             Pane::Targets => self.tree_cursor = clamp(self.tree_cursor, self.rows.len()),
-            Pane::Configs => self.config_cursor.0 = clamp(self.config_cursor.0, self.grid.configurations.len()),
+            Pane::Configs => {
+                let cells = &self.grid.cells;
+                let at = cells.iter().position(|c| *c == self.config_cursor).unwrap_or(0);
+                if let Some(cell) = cells.get(clamp(at, cells.len())) {
+                    self.config_cursor = *cell;
+                }
+            }
             Pane::Actions => self.action_cursor = clamp(self.action_cursor, ACTIONS.len()),
             Pane::Log => match self.tab {
                 // Scrolling counts screen rows up from the end: "up" scrolls back. Drawing stops

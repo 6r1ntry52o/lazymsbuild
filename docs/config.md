@@ -106,8 +106,7 @@ Each TUI action takes a key or a list of keys, which replace its defaults. Keys 
 | Action | Default | |
 |---|---|---|
 | `pane_1` … `pane_5` | `1` … `5` | Go to a pane |
-| `next_pane`, `prev_pane` | `tab`, `shift+tab` | Cycle the panes |
-| `left`, `right` | `h` `left`, `l` `right` | The platform in the configuration table (past the ends, and in the other panes: the neighbouring pane) |
+| `next_pane`, `prev_pane` | `tab` `l`, `shift+tab` `h` | Cycle the panes |
 | `up`, `down` | `k` `up`, `j` `down` | Move, scroll |
 | `top`, `bottom` | `g` `home`, `G` `end` | First, last (in the log: back to following the output) |
 | `page_up`, `page_down` | `ctrl+u` `pageup`, `ctrl+d` `pagedown` | Half a page |
