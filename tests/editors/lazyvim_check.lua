@@ -140,6 +140,26 @@ vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "
 check("e opens the error here", vim.fs.normalize(vim.api.nvim_buf_get_name(0)) == vim.fs.normalize(file)
   and vim.fn.line(".") == 3 and #vim.api.nvim_list_wins() == windows - 1, vim.api.nvim_buf_get_name(0) .. ":" .. vim.fn.line("."))
 
+-- Not on PATH (also: installed after Neovim started): the keys say so instead of failing in a terminal
+local path = vim.env.PATH
+local exe = vim.fn.exepath("lazymsbuild")
+local dir = vim.fs.normalize(vim.fs.dirname(exe)):lower()
+vim.env.PATH = table.concat(vim.tbl_filter(function(entry)
+  return vim.fs.normalize(entry):lower() ~= dir
+end, vim.split(path, ";", { plain = true })), ";")
+local own_hint = vim.g.lazymsbuild_install_hint -- a configuration may set its own
+vim.g.lazymsbuild_install_hint = nil
+notes = {}
+windows = #vim.api.nvim_list_wins()
+M.toggle()
+check("toggle: not on PATH", noted("not on PATH: install it, then") and #vim.api.nvim_list_wins() == windows, table.concat(notes, " / "))
+notes = {}
+vim.g.lazymsbuild_install_hint = "run install.ps1"
+M.errors()
+check("errors: install hint", noted("not on PATH: run install%.ps1$"), table.concat(notes, " / "))
+vim.g.lazymsbuild_install_hint = own_hint
+vim.env.PATH = path
+
 if #failures == 0 then
   out("LAZYVIM CHECK OK")
   vim.cmd("qa!")

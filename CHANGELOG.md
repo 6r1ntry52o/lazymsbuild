@@ -9,6 +9,12 @@ events) carry a `format_version` and follow the same rules.
 
 ## [Unreleased]
 
+### Changed
+
+- LazyVim plugin file: `<leader>mb` / `<leader>me` say that lazymsbuild is not on `PATH` (with
+  `vim.g.lazymsbuild_install_hint` telling how to install it) instead of opening a terminal that
+  fails.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added
