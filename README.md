@@ -170,7 +170,9 @@ it compiled, replaces a project's entries when the project was rebuilt successfu
 the entries of files that left their project. MSBuild hands cl.exe some settings outside the
 command line (the *VC++ Directories*, the target architecture); lazymsbuild adds them to the
 entries so clang tools see what the compiler saw. Clang tools cannot use MSVC's precompiled
-headers, so entries that use one also get `/Y-`, and clang-tidy works on them too.
+headers, so entries that use one also get `/Y-`, and clang-tidy works on them too. Clang warns
+about more than cl.exe, so entries with `/WX` also get `/WX-`: warnings stay warnings instead of
+stopping clang with errors that are not in the code.
 `docs/design.md` has the details and the measurements behind them.
 
 ## Privacy

@@ -223,6 +223,7 @@ pub fn read_output(path: &Path) -> Result<Vec<Entry>> {
     });
     for entry in &mut entries {
         super::cl::disable_pch(&mut entry.arguments);
+        super::cl::disable_warnings_as_errors(&mut entry.arguments);
     }
     Ok(entries)
 }

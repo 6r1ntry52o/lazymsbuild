@@ -15,6 +15,12 @@ events) carry a `format_version` and follow the same rules.
   `vim.g.lazymsbuild_install_hint` telling how to install it) instead of opening a terminal that
   fails.
 
+### Fixed
+
+- `/WX-` after `/WX` in every entry. clang warns about more than cl.exe, so with `/WX` (and
+  `/external:W4`, which reaches into the Windows SDK and the standard library) clangd stopped at its
+  error limit and reported errors that are not in the code. The build's `/WX` stays in the entry.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added

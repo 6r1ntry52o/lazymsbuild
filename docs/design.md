@@ -54,7 +54,8 @@ B entry:
   command's own options. clang-cl documents `/imsvc` as "add directory to system include search
   path, as if part of %INCLUDE%", which is exactly how cl.exe received them.
 
-Entries of both methods also get `/Y-` after `/Yc` or `/Yu` (see clang-tidy below).
+Entries of both methods also get `/Y-` after `/Yc` or `/Yu` (see clang-tidy below), and `/WX-`
+after `/WX` (see clangd below).
 
 Option C (`.binlog` converted by a separate tool) is not an extraction method: there is no
 `binlog2compilecommands` (GitHub search, 0 results). `build.keep_binlog` keeps a `.binlog` for
@@ -144,6 +145,14 @@ maps exactly like its `.sln` (including x86 -> Win32 and `<Build Solution="Relea
   cl mode by itself: `--driver-mode=cl` is not needed.
 - `/Yu`, `/Yc` and `/Fp` did not cause errors in clangd 23 even without a `.clangd`. `init` still writes
   the `Remove` rule, for older clangd versions and other clang tools.
+- `/WX` made clangd report errors that are not in the code (2026-10-25). clang warns about more than
+  cl.exe; `/WX` becomes `-Werror` and `/external:W4` becomes `-Wsystem-headers`, so warnings inside
+  the Windows SDK and the standard library became errors, clang stopped at its error limit, and the
+  rest of the file failed (`no type named 'duration' in 'std::chrono::steady_clock'`). In an
+  open-source solution built with `/W4 /WX /external:W4` (123 of 306 entries with `/WX`), three
+  sources that cl.exe compiles cleanly gave 21, 21 and 5 errors in `--check`; with `/WX-` after
+  `/WX`, none. Every entry with `/WX` therefore gets `/WX-` after it (cl.exe and clang-cl both take
+  it); the build's `/WX` stays in the entry, like `/Y-` below.
 
 ### clang-tidy (19.1, from Visual Studio 2022's LLVM; 2026-10-24)
 

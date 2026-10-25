@@ -10,7 +10,8 @@
 //!   `INCLUDE` and `EXTERNAL_INCLUDE` environment variables, as `/imsvc<dir>` (clang-cl: "add
 //!   directory to system include search path, as if part of %INCLUDE%").
 //!
-//! And `/Y-` after precompiled-header options, see [`disable_pch`].
+//! And `/Y-` after precompiled-header options, see [`disable_pch`], and `/WX-` after `/WX`, see
+//! [`disable_warnings_as_errors`].
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -189,6 +190,7 @@ pub fn entries(program: &str, args: &[String], context: &CompileContext<'_>, dir
             arguments.push(file_text.clone());
             arguments.extend(link.iter().cloned());
             disable_pch(&mut arguments);
+            disable_warnings_as_errors(&mut arguments);
             Entry {
                 directory: directory.clone(),
                 output: object_file(&compile, &file, context.directory),
@@ -213,6 +215,21 @@ pub fn disable_pch(arguments: &mut Vec<String>) {
         return;
     }
     arguments.insert(last + 1, "/Y-".to_string());
+}
+
+/// Adds `/WX-` after the last `/WX`. clang warns about more than cl.exe, and `/WX` (clang-cl:
+/// `-Werror`) makes those warnings errors; with `/external:W4` (`-Wsystem-headers`) that includes
+/// warnings inside the Windows SDK and the standard library. clang then stops at its error limit and
+/// reports the rest of the source as broken: 21 errors in a file cl.exe compiles cleanly, none with
+/// `/WX-` (clangd 23, `docs/design.md`). cl.exe and clang-cl both take `/WX-` as "warnings stay
+/// warnings". The build's `/WX` stays, so the entry still shows the build's options.
+pub fn disable_warnings_as_errors(arguments: &mut Vec<String>) {
+    let is = |arg: &str, name: &str| arg.strip_prefix('/').or_else(|| arg.strip_prefix('-')) == Some(name);
+    let Some(last) = arguments.iter().rposition(|a| is(a, "WX")) else { return };
+    if arguments[last + 1..].iter().any(|a| is(a, "WX-")) {
+        return;
+    }
+    arguments.insert(last + 1, "/WX-".to_string());
 }
 
 /// The `IncludePath` then `ExternalIncludePath` directories that exist, without repeats.
@@ -355,6 +372,32 @@ mod tests {
         let before = plain.clone();
         disable_pch(&mut plain);
         assert_eq!(plain, before);
+    }
+
+    #[test]
+    fn warnings_stay_warnings_for_clang_tools() {
+        let context = CompileContext::new(Path::new(r"C:\r"));
+        let e = entries(CL, &args("/c /W4 /WX /external:W4 main.cpp"), &context, &mut DirCache::default());
+        let a = &e[0].arguments;
+        let wx = a.iter().position(|x| x == "/WX").unwrap();
+        assert_eq!(a[wx + 1], "/WX-", "{a:?}");
+
+        let mut dash: Vec<String> = ["cl.exe", "-WX", "core.cpp"].map(String::from).into();
+        disable_warnings_as_errors(&mut dash);
+        assert_eq!(dash, ["cl.exe", "-WX", "/WX-", "core.cpp"]);
+        // Once only, and nothing when warnings are already warnings.
+        disable_warnings_as_errors(&mut dash);
+        assert_eq!(dash.iter().filter(|a| *a == "/WX-").count(), 1);
+        for line in ["cl.exe /WX /WX- core.cpp", "cl.exe /W4 core.cpp", "cl.exe /WX- core.cpp"] {
+            let mut a = args(line);
+            let before = a.clone();
+            disable_warnings_as_errors(&mut a);
+            assert_eq!(a, before);
+        }
+        // A later /WX wins over an earlier /WX-, as in cl.exe.
+        let mut late = args("cl.exe /WX- /WX core.cpp");
+        disable_warnings_as_errors(&mut late);
+        assert_eq!(late, ["cl.exe", "/WX-", "/WX", "/WX-", "core.cpp"]);
     }
 
     #[test]
