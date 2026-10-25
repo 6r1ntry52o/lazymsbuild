@@ -9,6 +9,8 @@ events) carry a `format_version` and follow the same rules.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-25
+
 ### Changed
 
 - LazyVim plugin file: `<leader>mb` / `<leader>me` say that lazymsbuild is not on `PATH` (with
@@ -74,5 +76,6 @@ events) carry a `format_version` and follow the same rules.
   licenses, and cargo-binstall metadata.
 - `README.ja.md`.
 
-[Unreleased]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/6r1ntry52o/lazymsbuild/releases/tag/v0.1.0
