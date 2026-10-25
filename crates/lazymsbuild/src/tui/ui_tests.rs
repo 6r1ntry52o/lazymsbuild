@@ -305,7 +305,10 @@ fn long_log_lines_wrap_and_scrolling_holds_still() {
     let log_rows = |s: &[String]| s.iter().filter(|l| l.contains("line ")).cloned().collect::<Vec<_>>();
     assert_eq!(log_rows(&before), log_rows(&after), "a scrolled-back view does not move while lines arrive");
     h.keys("g");
-    assert!(contains(&h.screen(120, 36), "lazymsbuild 0.1.0"), "g goes to the first line");
+    assert!(
+        contains(&h.screen(120, 36), concat!("lazymsbuild ", env!("CARGO_PKG_VERSION"))),
+        "g goes to the first line"
+    );
     h.keys("G");
     assert!(contains(&h.screen(120, 36), "line 109"), "G follows the output again");
     assert_eq!(h.app.log_scroll, 0);
