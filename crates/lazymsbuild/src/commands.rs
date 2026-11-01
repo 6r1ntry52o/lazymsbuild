@@ -12,7 +12,7 @@ use lazymsbuild_core::engine::{self, BuildRequest, Event, Outcome};
 use lazymsbuild_core::msbuild::Verb;
 use lazymsbuild_core::solution::Profile;
 use lazymsbuild_core::status::State;
-use lazymsbuild_core::workspace::{OpenOptions, Workspace};
+use lazymsbuild_core::workspace::{OpenOptions, SolutionChoice, Workspace};
 use lazymsbuild_core::{init, time};
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -31,16 +31,25 @@ fn start_dir(global: &Global) -> Result<std::path::PathBuf> {
 }
 
 pub fn open_workspace(global: &Global) -> Result<Workspace> {
+    open_solution(global, global.solution.clone())
+}
+
+/// What the TUI should ask before it starts (see [`Workspace::solution_choice`]).
+pub fn solution_choice(global: &Global) -> Result<Option<SolutionChoice>> {
     let start = start_dir(global)?;
-    let mut workspace =
-        Workspace::open(&OpenOptions { start, solution: global.solution.clone(), ..Default::default() })?;
+    Workspace::solution_choice(&OpenOptions { start, solution: global.solution.clone(), ..Default::default() })
+}
+
+/// Opens `solution`, or the one found from the start directory.
+pub fn open_solution(global: &Global, solution: Option<std::path::PathBuf>) -> Result<Workspace> {
+    let start = start_dir(global)?;
+    let named = solution.is_some();
+    let mut workspace = Workspace::open(&OpenOptions { start, solution, ..Default::default() })?;
     for warning in &workspace.warnings {
         eprintln!("{} {warning}", style::yellow("warning:"));
     }
-    // A solution chosen with --solution is the one later commands, and editors, find by default.
-    if global.solution.is_some()
-        && let Err(err) = workspace.remember_solution()
-    {
+    // A solution chosen by name is the one later commands, and editors, find by default.
+    if named && let Err(err) = workspace.remember_solution() {
         eprintln!("{} {err:#}", style::yellow("warning:"));
     }
     Ok(workspace)

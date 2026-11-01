@@ -9,6 +9,19 @@ events) carry a `format_version` and follow the same rules.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-01
+
+### Added
+
+- The TUI lists the solutions at startup when a repository has several (the whole repository, three
+  levels down), starting on the one used last. `--solution` and the `solution` setting skip the list.
+
+### Changed
+
+- From the repository root, a remembered solution in a subdirectory now goes before a solution at
+  the root, so that commands and editors use what was chosen in the TUI. A solution in the directory
+  a command runs in still goes first.
+
 ## [0.1.1] - 2026-10-25
 
 ### Changed
@@ -76,6 +89,7 @@ events) carry a `format_version` and follow the same rules.
   licenses, and cargo-binstall metadata.
 - `README.ja.md`.
 
-[Unreleased]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/6r1ntry52o/lazymsbuild/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/6r1ntry52o/lazymsbuild/releases/tag/v0.1.0

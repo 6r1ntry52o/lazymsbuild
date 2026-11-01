@@ -9,9 +9,11 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap};
+use unicode_width::UnicodeWidthStr;
 
 use super::app::{ACTIONS, App, LineKind, LogTab, MenuItem, Pane, Popup};
 use super::keys::Action;
+use super::picker::Picker;
 use super::tree::RowKind;
 
 /// The accent (focused border, chosen target and configuration): Visual Studio's purple.
@@ -92,6 +94,47 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if app.popup.is_some() {
         draw_popup(frame, app, &theme);
     }
+}
+
+/// The list of solutions shown before the TUI proper.
+pub fn draw_picker(frame: &mut Frame, picker: &mut Picker) {
+    let theme = Theme::new();
+    let area = frame.area();
+    let wanted = picker.names.iter().map(|name| UnicodeWidthStr::width(name.as_str())).max().unwrap_or(0) + 16;
+    let rect = centered(area, (wanted as u16).max(60), picker.names.len() as u16 + 2);
+    picker.page = rect.height.saturating_sub(2) as usize;
+    let key = |action| Span::styled(picker.keymap.label(action), theme.warning());
+    let hint = Line::from(vec![
+        Span::raw(" "),
+        key(Action::Down),
+        Span::raw("/"),
+        key(Action::Up),
+        Span::raw(" move  "),
+        key(Action::Select),
+        Span::raw(" open  "),
+        key(Action::Quit),
+        Span::raw(" quit "),
+    ]);
+    let items: Vec<ListItem> = picker
+        .names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let mut spans = vec![Span::raw(name.as_str())];
+            if picker.last_used == Some(index) {
+                spans.push(Span::styled("  (last used)", theme.dim()));
+            }
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.focused_border())
+        .title(Line::from(" Choose a solution "))
+        .title_bottom(hint);
+    let list = List::new(items).block(block).highlight_style(theme.cursor(true));
+    let mut state = ListState::default().with_selected(Some(picker.cursor));
+    frame.render_stateful_widget(list, rect, &mut state);
 }
 
 /// The log over the database status, which is only shown (it has no focus of its own).

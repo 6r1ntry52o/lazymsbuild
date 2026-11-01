@@ -91,6 +91,9 @@ From then on, build from the TUI or with `lazymsbuild build`, and the database f
 project; it is shown under the list) and a configuration in pane 2, then build. The keys follow
 lazygit; every one can be changed in `[keys]` of the configuration.
 
+When the repository has several solutions, it first lists them, starting on the one used last.
+`--solution` or the `solution` setting skips the list.
+
 | Key | Action |
 |---|---|
 | `1`-`3`, `Tab`, `Shift+Tab`, `h`, `l` | Switch the panes on the left |

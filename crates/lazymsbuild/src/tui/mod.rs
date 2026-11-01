@@ -2,11 +2,13 @@
 
 mod app;
 mod keys;
+mod picker;
 mod tree;
 #[cfg(test)]
 mod ui_tests;
 mod view;
 
+use std::io::IsTerminal;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -22,7 +24,17 @@ use self::app::{App, EditorRequest};
 use crate::cli::Global;
 
 pub async fn run(global: &Global) -> Result<i32> {
-    let workspace = crate::commands::open_workspace(global)?;
+    // Without a terminal to ask on, opening reports the solutions and how to name one.
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    let choice = if interactive { crate::commands::solution_choice(global)? } else { None };
+    let solution = match choice {
+        Some(choice) => match picker::run(&choice)? {
+            Some(path) => Some(path),
+            None => return Ok(0),
+        },
+        None => global.solution.clone(),
+    };
+    let workspace = crate::commands::open_solution(global, solution)?;
     let (events_tx, mut events_rx) = mpsc::unbounded_channel();
     let (done_tx, mut done_rx) = mpsc::unbounded_channel();
     let mut app = App::new(workspace, events_tx, done_tx)?;

@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{self, Config, OutputMode};
+use crate::config::{self, Config, Keys, OutputMode};
 use crate::solution::{self, Profile, Solution};
 use crate::{fsutil, git, paths};
 
@@ -79,6 +79,21 @@ pub struct OutputRecord {
 
 pub const LOCAL_STATE_VERSION: u32 = 1;
 
+/// See [`Workspace::solution_choice`].
+#[derive(Clone, Debug)]
+pub struct SolutionChoice {
+    /// The solutions, sorted.
+    pub solutions: Vec<PathBuf>,
+    /// The index to start on: the one used last, otherwise the nearest to the start directory.
+    pub preselected: usize,
+    /// The index of the one used last.
+    pub last_used: Option<usize>,
+    /// What to show the paths relative to.
+    pub root: PathBuf,
+    /// The `[keys]` settings.
+    pub keys: BTreeMap<String, Keys>,
+}
+
 #[derive(Clone)]
 pub struct Workspace {
     pub solution: Solution,
@@ -111,18 +126,10 @@ impl Workspace {
                 Some((configured, root)) => paths::absolutize(root, Path::new(configured)),
                 None => {
                     let found = solution::find_solutions(&start, start_root.as_deref());
-                    if found.len() > 1 {
-                        // A tool that only knows the directory (the editor) uses the one used last.
-                        let remembered = start_root.as_deref().and_then(|root| {
-                            let local = read_local_state(&state_dir_for(&state_root, root));
-                            local.last_solution.filter(|last| found.iter().any(|f| paths::same(f, last)))
-                        });
-                        match remembered {
-                            Some(last) => last,
-                            None => solution::pick_one(found, &start)?,
-                        }
-                    } else {
-                        solution::pick_one(found, &start)?
+                    // A tool that only knows the directory (the editor) uses the one used last.
+                    match start_root.as_deref().and_then(|root| remembered_solution(&state_root, root, &found)) {
+                        Some(last) => last,
+                        None => solution::pick_one(found, &start)?,
                     }
                 }
             },
@@ -153,6 +160,47 @@ impl Workspace {
             state_dir,
             local,
         })
+    }
+
+    /// What the TUI asks at startup: the repository's solutions, when it has several and neither
+    /// `--solution` nor the `solution` setting names one. `None` when there is nothing to ask.
+    pub fn solution_choice(options: &OpenOptions) -> Result<Option<SolutionChoice>> {
+        if options.solution.is_some() {
+            return Ok(None);
+        }
+        let start = paths::normalize(&std::path::absolute(&options.start).unwrap_or_else(|_| options.start.clone()));
+        let start_root = git::find_root(&start);
+        let loaded = config::load(options.user_config_dir.as_deref(), start_root.as_deref())?;
+        if loaded.config.solution.is_some() && start_root.is_some() {
+            return Ok(None);
+        }
+        let nearest = solution::find_solutions(&start, start_root.as_deref());
+        let mut solutions = nearest.clone();
+        if let Some(root) = &start_root {
+            for path in solution::find_in_repository(root) {
+                if !solutions.iter().any(|known| paths::same(known, &path)) {
+                    solutions.push(path);
+                }
+            }
+        }
+        solutions.sort();
+        if solutions.len() < 2 {
+            return Ok(None);
+        }
+        let position = |path: &Path| solutions.iter().position(|known| paths::same(known, path));
+        let last_used = match &start_root {
+            Some(root) => {
+                let state_root = match &options.state_root {
+                    Some(state_root) => state_root.clone(),
+                    None => config::state_root()?,
+                };
+                read_local_state(&state_dir_for(&state_root, root)).last_solution.and_then(|last| position(&last))
+            }
+            None => None,
+        };
+        let preselected = last_used.or_else(|| nearest.first().and_then(|near| position(near))).unwrap_or(0);
+        let root = start_root.unwrap_or(start);
+        Ok(Some(SolutionChoice { solutions, preselected, last_used, root, keys: loaded.config.keys }))
     }
 
     /// The output mode: what `init` chose for this repository, otherwise the setting.
@@ -325,6 +373,16 @@ fn read_local_state(state_dir: &Path) -> LocalState {
     std::fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
 }
 
+/// The solution used last, if it is still a candidate: one of `found`, or, when nothing nearer
+/// than the repository root was found, any solution of the repository. A solution in the directory
+/// being worked in goes before one remembered elsewhere.
+fn remembered_solution(state_root: &Path, root: &Path, found: &[PathBuf]) -> Option<PathBuf> {
+    let last = read_local_state(&state_dir_for(state_root, root)).last_solution?;
+    let has = |list: &[PathBuf]| list.iter().any(|f| paths::same(f, &last));
+    let at_root = found.iter().all(|f| f.parent().is_some_and(|dir| paths::same(dir, root)));
+    (has(found) || (at_root && has(&solution::find_in_repository(root)))).then_some(last)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,5 +402,99 @@ mod tests {
         assert_eq!(pick("x86"), "Debug|Win32");
         assert_eq!(preferred_profile(&profiles[3..], "aarch64").unwrap().to_string(), "Release|x64");
         assert_eq!(preferred_profile(&profiles[2..], "x86_64").unwrap().to_string(), "Debug|x64");
+    }
+
+    const SLN: &str = "Microsoft Visual Studio Solution File, Format Version 12.00\r\n";
+
+    struct Repo {
+        _dir: tempfile::TempDir,
+        root: PathBuf,
+        state: PathBuf,
+        config: PathBuf,
+    }
+
+    impl Repo {
+        fn new(solutions: &[&str]) -> Repo {
+            let dir = tempfile::tempdir().unwrap();
+            let base = paths::normalize(&std::path::absolute(dir.path()).unwrap());
+            let root = base.join("repo");
+            std::fs::create_dir_all(root.join(".git")).unwrap();
+            for solution in solutions {
+                let path = root.join(solution);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, SLN).unwrap();
+            }
+            std::fs::create_dir_all(base.join("config")).unwrap();
+            Repo { _dir: dir, root, state: base.join("state"), config: base.join("config") }
+        }
+
+        fn options(&self, start: &str, solution: Option<&str>) -> OpenOptions {
+            OpenOptions {
+                start: self.root.join(start),
+                solution: solution.map(|s| self.root.join(s)),
+                state_root: Some(self.state.clone()),
+                user_config_dir: Some(self.config.clone()),
+            }
+        }
+
+        fn choice(&self, start: &str) -> Option<SolutionChoice> {
+            Workspace::solution_choice(&self.options(start, None)).unwrap()
+        }
+
+        /// The solution a command that was not told which one uses.
+        fn opened(&self, start: &str) -> String {
+            let workspace = Workspace::open(&self.options(start, None)).unwrap();
+            workspace.display_path(&workspace.solution.path).replace('\\', "/")
+        }
+
+        fn remember(&self, solution: &str) {
+            Workspace::open(&self.options("", Some(solution))).unwrap().remember_solution().unwrap();
+        }
+
+        fn names(choice: &SolutionChoice) -> Vec<String> {
+            choice.solutions.iter().map(|p| paths::display_relative(p, &choice.root).replace('\\', "/")).collect()
+        }
+    }
+
+    #[test]
+    fn one_solution_is_nothing_to_choose() {
+        let repo = Repo::new(&["A.sln"]);
+        assert!(repo.choice("").is_none());
+    }
+
+    #[test]
+    fn the_whole_repository_is_offered_with_the_nearest_first() {
+        let repo = Repo::new(&["A.sln", "sub/B.sln", "tools/deep/C.slnx", "x64/Generated.sln"]);
+        let choice = repo.choice("").unwrap();
+        assert_eq!(Repo::names(&choice), ["A.sln", "sub/B.sln", "tools/deep/C.slnx"]);
+        assert_eq!(choice.preselected, 0);
+        assert_eq!(choice.last_used, None);
+
+        let choice = repo.choice("sub").unwrap();
+        assert_eq!(Repo::names(&choice)[choice.preselected], "sub/B.sln");
+    }
+
+    #[test]
+    fn naming_a_solution_skips_the_question() {
+        let repo = Repo::new(&["A.sln", "B.sln"]);
+        assert!(Workspace::solution_choice(&repo.options("", Some("A.sln"))).unwrap().is_none());
+
+        std::fs::write(repo.root.join(".lazymsbuild.toml"), "solution = \"B.sln\"\n").unwrap();
+        assert!(repo.choice("").is_none());
+    }
+
+    #[test]
+    fn the_one_used_last_is_preselected_and_later_commands_follow_it() {
+        let repo = Repo::new(&["A.sln", "sub/B.sln", "other/C.sln"]);
+        assert_eq!(repo.opened(""), "A.sln");
+
+        repo.remember("sub/B.sln");
+        let choice = repo.choice("").unwrap();
+        assert_eq!(Repo::names(&choice)[choice.preselected], "sub/B.sln");
+        assert_eq!(choice.last_used, Some(choice.preselected));
+        // The editor starts at the root, where A.sln also is.
+        assert_eq!(repo.opened(""), "sub/B.sln");
+        // A solution in the directory being worked in goes first.
+        assert_eq!(repo.opened("other"), "other/C.sln");
     }
 }

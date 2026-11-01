@@ -211,7 +211,12 @@ pub fn find_solutions(start: &Path, git_root: Option<&Path>) -> Vec<PathBuf> {
         }
         dir = d.parent();
     }
-    let Some(root) = git_root else { return Vec::new() };
+    git_root.map(find_in_repository).unwrap_or_default()
+}
+
+/// The solutions in `root` and the directories below it (three levels, skipping hidden and build
+/// output directories), sorted.
+pub fn find_in_repository(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     search_below(root, 3, &mut found);
     found.sort();

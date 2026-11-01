@@ -280,7 +280,8 @@ block `lazymsbuild init --mode external` prints to `%LOCALAPPDATA%\clangd\config
 - `lazymsbuild` must be on `PATH` when Neovim starts; without it the plugin stays out of the way
   (no `:CompileCommands`, no notifications), and `<leader>mb` / `<leader>me` only say that it is
   not on `PATH` (with `vim.g.lazymsbuild_install_hint`, if set, telling how to install it).
-- A repository with several solutions: run a command with `--solution <file>` once (for example
+- A repository with several solutions: choose one in the list the TUI shows at startup
+  (`<leader>mb`), or run a command with `--solution <file>` once (for example
   `lazymsbuild --solution <file> init`); the plugin's calls then use that solution.
 - Coming from a setup that wrote `build/compile_commands.json` (CMake habits, an older
   `:CompileCommands`): delete that file, or clangd may keep reading it; `lazymsbuild check` lists

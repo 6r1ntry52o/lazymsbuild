@@ -37,11 +37,11 @@ struct Tui {
 }
 
 impl Tui {
-    fn start(repo: &Path, state: &Path, config: &Path) -> Tui {
+    fn start(repo: &Path, state: &Path, config: &Path, args: &[&str]) -> Tui {
         let pair =
             native_pty_system().openpty(PtySize { rows: 40, cols: 140, pixel_width: 0, pixel_height: 0 }).unwrap();
         let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_lazymsbuild"));
-        command.args(["--solution", "Basic.sln"]);
+        command.args(args);
         command.cwd(repo);
         command.env("LAZYMSBUILD_STATE_DIR", state);
         command.env("LAZYMSBUILD_CONFIG_DIR", config);
@@ -164,7 +164,7 @@ fn the_tui_answers_during_a_build_and_cancel_leaves_nothing() {
     std::fs::create_dir_all(base.join("config")).unwrap();
 
     let started = chrono::Local::now().to_rfc3339();
-    let mut tui = Tui::start(&repo, &base.join("state"), &base.join("config"));
+    let mut tui = Tui::start(&repo, &base.join("state"), &base.join("config"), &["--solution", "Basic.sln"]);
     tui.wait_for(Duration::from_secs(30), "the first screen", |s| s.contains("clangd DB Status"));
     // First start: init is offered. Not now.
     tui.wait_for(Duration::from_secs(10), "the init question", |s| s.contains("Run init?"));
@@ -208,6 +208,57 @@ fn the_tui_answers_during_a_build_and_cancel_leaves_nothing() {
         if let Some(status) = tui.child.try_wait().unwrap() {
             assert!(status.success(), "lazymsbuild exited with {status:?}");
             break;
+        }
+        assert!(Instant::now() < deadline, "q did not quit");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Basic.sln and Basic.slnx: the first start asks, and the choice is what the TUI opens and what
+/// the next start offers first.
+#[test]
+fn several_solutions_are_offered_at_startup() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = std::path::absolute(dir.path()).unwrap();
+    let repo = base.join("repo");
+    copy_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join(r"..\..\tests\fixtures\basic"), &repo);
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    let (state, config) = (base.join("state"), base.join("config"));
+    std::fs::create_dir_all(&config).unwrap();
+
+    // Quitting the list ends the program and remembers nothing.
+    let mut tui = Tui::start(&repo, &state, &config, &[]);
+    tui.wait_for(Duration::from_secs(30), "the list", |s| s.contains("Choose a solution") && s.contains("Basic.slnx"));
+    tui.send(b"q");
+    wait_for_exit(&mut tui);
+    drop(tui);
+
+    let mut tui = Tui::start(&repo, &state, &config, &[]);
+    tui.wait_for(Duration::from_secs(30), "the list", |s| s.contains("Choose a solution"));
+    assert!(!tui.screen().contains("last used"), "{}", tui.screen());
+    tui.send(b"j");
+    tui.send(b"\r");
+    tui.wait_for(Duration::from_secs(30), "the TUI", |s| s.contains("clangd DB Status"));
+    tui.wait_for(Duration::from_secs(10), "the init question", |s| s.contains("Run init?"));
+    tui.send(b"n");
+    tui.wait_for(Duration::from_secs(10), "the question to close", |s| !s.contains("Run init?"));
+    assert!(tui.screen().contains("Basic.slnx"), "{}", tui.screen());
+    tui.send(b"q");
+    wait_for_exit(&mut tui);
+    drop(tui);
+
+    let tui = Tui::start(&repo, &state, &config, &[]);
+    tui.wait_for(Duration::from_secs(30), "the list", |s| {
+        s.lines().any(|line| line.contains("Basic.slnx") && line.contains("last used"))
+    });
+}
+
+fn wait_for_exit(tui: &mut Tui) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = tui.child.try_wait().unwrap() {
+            assert!(status.success(), "lazymsbuild exited with {status:?}");
+            return;
         }
         assert!(Instant::now() < deadline, "q did not quit");
         std::thread::sleep(Duration::from_millis(50));
